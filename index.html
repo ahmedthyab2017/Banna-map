@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#1C3552">
+<title>بنّاء AI v7 — قياس الأراضي وتصميم البيوت</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+<script src="bannaa-geo-patch.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#1C3552; --navy2:#2C4A6E; --steel:#41648C;
+  --gold:#C9A22A; --gold2:#E3C45A;
+  --bg:#F1F4F8; --card:#FFFFFF; --line:#DEE6EE;
+  --ink:#1B2735; --mut:#6E7E90;
+  --green:#2E8B6A; --red:#C0493F;
+  --grad:linear-gradient(135deg,#1C3552,#2C4A6E);
+  --grad-gold:linear-gradient(135deg,#C9A22A,#E3C45A);
+  --r:16px; --sh:0 8px 22px rgba(28,53,82,.12); --sh-s:0 3px 9px rgba(28,53,82,.09);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{font-family:'IBM Plex Sans Arabic',Tahoma,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;overflow:hidden}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input{font-family:inherit}
+
+/* ===== Header ===== */
+header{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--grad);color:#fff;border-bottom:3px solid var(--gold)}
+.logo{font-weight:700;font-size:19px}
+.logo em{font-style:normal;color:var(--gold2)}
+.logo small{display:block;font-weight:400;font-size:10.5px;opacity:.8}
+header .grow{flex:1}
+.icon-btn{width:38px;height:38px;border-radius:11px;background:rgba(255,255,255,.14);display:grid;place-items:center;font-size:17px}
+
+/* ===== Tabs ===== */
+nav.tabs{display:flex;gap:7px;padding:9px 12px;background:var(--card);border-bottom:1px solid var(--line)}
+.tab{flex:1;min-width:72px;padding:9px 4px;border-radius:11px;background:var(--bg);color:var(--mut);font-size:12.5px;font-weight:500;text-align:center;white-space:nowrap;position:relative;transition:.2s;border:1px solid var(--line)}
+.tab.active{background:var(--navy);color:#fff;font-weight:700;border-color:var(--navy)}
+.tab.done::after{content:'✓';position:absolute;top:2px;left:6px;color:var(--green);font-size:11px;font-weight:700}
+.tab.active.done::after{color:var(--gold2)}
+
+/* ===== Views ===== */
+.view{display:none;height:calc(100dvh - 116px);overflow-y:auto;-webkit-overflow-scrolling:touch;animation:fadeUp .25s ease}
+.view.active{display:block}
+#view-land{overflow:hidden;display:none;flex-direction:column}
+#view-land.active{display:flex}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.view{animation:none}}
+
+/* ===== Map ===== */
+#mapwrap{position:relative;flex:1;min-height:62dvh;margin:8px 10px 0;border-radius:var(--r);overflow:hidden;box-shadow:var(--sh)}
+body.mapfull .sheet, body.mapfull #toDesign{display:none!important}
+body.mapfull #mapwrap{margin:0;border-radius:0}
+#map{position:absolute;inset:0;direction:ltr}
+.map-tools{position:absolute;top:10px;right:10px;z-index:800;display:flex;flex-direction:column;gap:7px}
+.map-tools button{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.96);color:var(--navy);font-size:19px;box-shadow:var(--sh-s)}
+.map-tools button.on{background:var(--navy);color:#fff}
+.base-chips{position:absolute;top:10px;left:10px;z-index:800;display:flex;flex-direction:column;gap:6px}
+.base-chips button{padding:7px 12px;border-radius:18px;background:rgba(255,255,255,.96);font-size:11.5px;color:var(--mut);box-shadow:var(--sh-s);font-weight:500}
+.base-chips button.on{background:var(--navy);color:#fff;font-weight:700}
+.hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);z-index:800;background:rgba(28,53,82,.92);padding:7px 16px;border-radius:18px;font-size:11.5px;color:#fff;white-space:nowrap;box-shadow:var(--sh-s)}
+
+.vtx{background:none!important;border:none!important}
+.vtx .dot{width:30px;height:30px;border-radius:50%;background:var(--grad-gold);color:#3d2f00;font-weight:700;font-size:13px;display:grid;place-items:center;border:3px solid var(--navy);box-shadow:0 3px 9px rgba(0,0,0,.5)}
+.side-tag{background:none!important;border:none!important}
+.side-tag span{background:rgba(255,255,255,.95);color:var(--navy);padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.4);border:1px solid var(--gold)}
+.del-pt{background:var(--red);color:#fff;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700}
+.leaflet-popup-content{margin:10px 12px;font-family:inherit;direction:rtl}
+
+/* ===== Bottom sheet ===== */
+.sheet{background:var(--card);border-radius:18px 18px 0 0;margin-top:8px;display:flex;flex-direction:column;box-shadow:0 -5px 18px rgba(28,53,82,.10);border-top:3px solid var(--gold)}
+.sheet-head{display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer}
+.area-big{font-size:21px;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums}
+.area-big small{font-size:11.5px;color:var(--mut);font-weight:500}
+.chev{width:34px;height:34px;border-radius:10px;background:var(--bg);display:grid;place-items:center;font-size:14px;color:var(--navy);transition:transform .2s;border:1px solid var(--line)}
+.sheet.collapsed .chev{transform:rotate(180deg)}
+.sheet-body{overflow-y:auto;padding:0 14px 14px;max-height:26dvh}
+#toDesign{padding:11px;margin:8px 12px;width:calc(100% - 24px)}
+.sheet.collapsed .sheet-body{display:none}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.metric{border-radius:12px;padding:9px 6px;text-align:center;background:#EFF3F8;border:1px solid var(--line)}
+.metric b{display:block;font-size:14.5px;font-variant-numeric:tabular-nums;color:var(--navy)}
+.metric:nth-child(odd) b{color:#8a6e12}
+.metric span{font-size:10.5px;color:var(--mut)}
+.side-row{display:flex;align-items:center;gap:8px;padding:9px 11px;background:#F7FAFD;border:1px solid var(--line);border-radius:12px;margin-bottom:7px;font-size:12.5px}
+.side-row .dir{color:var(--steel);font-weight:700;font-size:11.5px}
+.side-row .len{font-weight:700;font-variant-numeric:tabular-nums;color:var(--navy);font-size:12px}
+.side-row .grow{flex:1}
+.fchip{padding:5px 10px;border-radius:13px;font-size:11px;border:1.5px solid var(--line);color:var(--mut);background:#fff;font-weight:500}
+.fchip.on-main{background:var(--grad-gold);color:#3d2f00;border-color:transparent;font-weight:700}
+.fchip.on-sec{background:var(--steel);color:#fff;border-color:transparent;font-weight:700}
+
+/* ===== Cards & wizard ===== */
+.card{background:var(--card);border-radius:var(--r);padding:16px;margin:12px;box-shadow:var(--sh-s);border-right:4px solid var(--navy)}
+.card:nth-of-type(even){border-right-color:var(--gold)}
+.card h3{font-size:15px;margin-bottom:4px;color:var(--navy)}
+.card .sub{font-size:12px;color:var(--mut);margin-bottom:12px}
+.q{margin-bottom:18px}
+.q label{display:block;font-size:14px;font-weight:700;margin-bottom:9px}
+.q label .req{color:var(--red)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips button{padding:9px 15px;border-radius:11px;background:#fff;border:1.5px solid var(--line);font-size:13px;color:var(--ink);transition:.15s;box-shadow:var(--sh-s)}
+.chips button:active{transform:scale(.96)}
+.chips button.on{background:var(--navy);color:#fff;border-color:var(--navy);font-weight:700}
+.chips button.on::before{content:'✓ '}
+.stepper{display:flex;align-items:center;gap:16px}
+.stepper button{width:44px;height:44px;border-radius:12px;background:#fff;border:1.5px solid var(--line);font-size:21px;font-weight:700;color:var(--navy);box-shadow:var(--sh-s)}
+.stepper b{font-size:21px;min-width:36px;text-align:center;font-variant-numeric:tabular-nums;color:var(--navy)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.numfield label{font-size:12px;color:var(--mut);display:block;margin-bottom:5px;font-weight:500}
+.numfield input{width:100%;padding:11px;border-radius:11px;border:1.5px solid var(--line);background:#F9FBFD;color:var(--ink);font-size:15px;text-align:center}
+.numfield input:focus,input.txt:focus{outline:none;border-color:var(--gold)}
+input.txt{width:100%;padding:12px;border-radius:12px;border:1.5px solid var(--line);background:#fff;color:var(--ink);font-size:14px;box-shadow:var(--sh-s)}
+.btn{display:block;width:calc(100% - 24px);margin:12px;padding:14px;border-radius:13px;background:var(--navy);color:#fff;font-weight:700;font-size:15px;text-align:center;box-shadow:0 5px 14px rgba(28,53,82,.30);transition:.15s}
+.btn:active{transform:scale(.985)}
+.btn:disabled{opacity:.45}
+.btn.ghost{background:#fff;color:var(--ink);border:1.5px solid var(--line);box-shadow:var(--sh-s)}
+.btn.gold{background:var(--grad-gold);color:#3d2f00;box-shadow:0 5px 14px rgba(201,162,42,.35)}
+.inline-btns{display:flex;gap:10px;margin:12px}
+.inline-btns .btn{flex:1;margin:0}
+
+/* ===== Proposals ===== */
+.prop{background:var(--card);border-radius:var(--r);padding:16px;margin:12px;box-shadow:var(--sh-s);border-right:5px solid var(--navy)}
+.prop:nth-child(even){border-right-color:var(--gold)}
+.prop h3{font-size:15px;margin-bottom:8px;color:var(--navy)}
+.prop h4{font-size:12.5px;color:#8a6e12;margin:11px 0 4px}
+.prop p,.prop li{font-size:13px;line-height:1.75;color:var(--ink)}
+.prop ul{padding-right:18px}
+.prop .pm{display:flex;gap:8px;margin-top:9px}
+.prop .pm div{flex:1;border-radius:11px;padding:9px;font-size:12px;line-height:1.65}
+.prop .plus{background:#EAF4F0;color:#1d5c45}
+.prop .minus{background:#F8ECEA;color:#7d2f28}
+.prop .p3d{direction:ltr;text-align:left;font-size:11.5px;background:#EFF3F8;color:var(--steel);padding:9px;border-radius:9px}
+.spin{width:28px;height:28px;border:3.5px solid var(--line);border-top-color:var(--gold);border-radius:50%;animation:sp 1s linear infinite;margin:0 auto}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ===== Report ===== */
+#report{background:#fff;color:var(--ink);margin:12px;border-radius:var(--r);padding:18px;font-size:13px;box-shadow:var(--sh-s)}
+#report h1{font-size:20px;color:var(--navy);border-bottom:3px solid var(--gold);padding-bottom:8px;margin-bottom:4px}
+#report h2{font-size:15px;color:var(--navy);margin:18px 0 8px;border-right:4px solid var(--gold);padding-right:9px}
+#report table{width:100%;border-collapse:collapse;margin:8px 0;font-size:12px}
+#report th{background:#EFF3F8;color:var(--navy);padding:7px;border:1px solid var(--line);font-size:11.5px}
+#report td{padding:6px 7px;border:1px solid #e8eef4;text-align:center;font-variant-numeric:tabular-nums}
+#report .meta{color:var(--mut);font-size:11.5px;margin-bottom:10px}
+#report img.sat{width:100%;border-radius:11px;display:block;border:1px solid var(--line)}
+#report .warn{background:#F8ECEA;border:1.5px solid var(--red);color:#7d2f28;border-radius:11px;padding:13px;font-size:12.5px;line-height:1.8;margin-top:16px;font-weight:500}
+#report .shape{display:flex;justify-content:center;background:#F7FAFD;border-radius:11px;padding:8px;border:1px solid var(--line)}
+#report .req-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;font-size:12px}
+#report .req-grid div{padding:4px 0;border-bottom:1px dashed var(--line)}
+#report .req-grid b{color:#8a6e12}
+#report .prop-r{border:1px solid var(--line);border-radius:11px;padding:11px;margin:8px 0;page-break-inside:avoid}
+#report .prop-r h3{font-size:13.5px;color:var(--navy);margin-bottom:5px}
+#report .prop-r p{font-size:12px;line-height:1.7;margin:3px 0}
+#report .tier-hl{background:#F6F0DC!important;font-weight:700}
+.toast{position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:11px 20px;border-radius:22px;font-size:13px;z-index:3000;box-shadow:var(--sh);opacity:0;transition:.25s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+
+/* ===== Modals ===== */
+.modal{position:fixed;inset:0;background:rgba(28,53,82,.5);z-index:2000;display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(3px)}
+.modal.open{display:flex}
+.modal .box{background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:480px;border-top:3px solid var(--gold)}
+.modal h3{margin-bottom:14px;font-size:15px;color:var(--navy)}
+.modal .row{display:flex;gap:10px;margin-bottom:10px}
+.modal .row input{flex:1}
+
+.models{display:flex;flex-wrap:wrap;gap:7px}
+.models button{padding:8px 13px;border-radius:18px;background:#EFF3F8;border:1px solid var(--line);font-size:11.5px;color:var(--navy);font-weight:500}
+.models button:active{transform:scale(.95)}
+.badge{display:inline-block;padding:4px 9px;border-radius:999px;background:#EFF3F8;border:1px solid var(--line);font-size:11px;color:var(--steel);font-weight:700;margin:2px}
+.warn-mini{background:#FFF8E2;border:1px solid #E3C45A;border-radius:12px;padding:10px;font-size:12px;line-height:1.8;color:#5e4a00;margin-top:8px}
+.imgrid{display:flex;flex-wrap:wrap;gap:9px;margin-top:6px}
+.imgrid img{width:84px;height:84px;object-fit:cover;border-radius:10px;border:1px solid var(--line);display:block}
+.thumb{position:relative}
+.thumb b{position:absolute;top:-7px;left:-7px;background:var(--red);color:#fff;width:21px;height:21px;border-radius:50%;font-size:11px;display:grid;place-items:center;cursor:pointer}
+.addimg{width:84px;height:84px;border-radius:10px;border:2px dashed var(--line);font-size:26px;color:var(--mut);background:#FBFCFE}
+#report .imgrid img{width:47%;height:auto;border-radius:8px}
+#report .imgrid{page-break-inside:avoid}
+
+@media print{
+  body{overflow:visible;background:#fff}
+  header,nav.tabs,.no-print,.modal,.toast{display:none!important}
+  .view{display:none!important;height:auto;overflow:visible}
+  #view-report{display:block!important}
+  #report{margin:0;border-radius:0;padding:0;box-shadow:none}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">بنّاء <em>AI</em><small>v7 · قياس الأرض وتصميم البيت — دار الإبداع للحلول البرمجية</small></div>
+  <div class="grow"></div>
+  <button class="icon-btn" onclick="openModal('m-settings')" title="الإعدادات">⚙️</button>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" id="tab-0" onclick="go(0)">١· الأرض</button>
+  <button class="tab" id="tab-1" onclick="go(1)">٢· المتطلبات</button>
+  <button class="tab" id="tab-2" onclick="go(2)">٣· المقترحات</button>
+  <button class="tab" id="tab-3" onclick="go(3)">٤· التقرير</button>
+</nav>
+
+<!-- ============ 1) LAND ============ -->
+<section class="view active" id="view-land">
+  <div id="mapwrap">
+    <div id="map"></div>
+    <div class="base-chips">
+      <button id="b-esri" class="on" onclick="setBase('esri')">Esri فضائي</button>
+      <button id="b-osm" onclick="setBase('osm')">خريطة شوارع</button>
+      <button id="b-ghyb" onclick="setBase('ghyb')">Google اختياري</button>
+    </div>
+    <div class="map-tools">
+      <button id="t-full" onclick="toggleFull()" title="ملء الشاشة">⛶</button>
+      <button id="t-add" class="on" onclick="setMode('add')" title="إضافة نقاط">📍</button>
+      <button id="t-rect" onclick="setMode('rect')" title="مستطيل بنقطتين">▭</button>
+      <button onclick="openModal('m-gps')" title="إدخال GPS يدوي">⌨️</button>
+      <button onclick="locateMe()" title="موقعي">🎯</button>
+      <button onclick="captureAveraged(20)" title="التقاط نقطة بمتوسط 20 ثانية">📌</button>
+      <button onclick="undoPt()" title="تراجع عن آخر نقطة">↩️</button>
+      <button onclick="clearPts()" title="مسح الكل">🗑️</button>
+    </div>
+    <div class="hint" id="hint">اضغط لإضافة نقطة · اسحب النقطة لتعديلها · اضغط عليها لحذفها</div>
+  </div>
+  <div class="sheet collapsed" id="sheet">
+    <div class="sheet-head" onclick="toggleSheet()">
+      <div class="area-big" id="areaBig">0.0 <small>م²</small></div>
+      <div class="grow"></div>
+      <button class="fchip" onclick="event.stopPropagation();dlGeoJSON()" style="border-color:var(--green);color:var(--green)">⬇ GeoJSON</button>
+      <button class="fchip" onclick="event.stopPropagation();zoomToPlot()" style="border-color:var(--steel);color:var(--steel)">تكبير للقطعة</button>
+      <div class="chev">▾</div>
+    </div>
+    <div class="sheet-body">
+      <input class="txt" id="projName" style="margin-bottom:10px" placeholder="اسم المشروع (مثال: قطعة حي الجولان ٢٠٠م)" oninput="S.project=this.value;persist()">
+      <div class="metrics">
+        <div class="metric"><b id="mDonum">0</b><span>دونم</span></div>
+        <div class="metric"><b id="mOlek">0</b><span>أولك (١٠٠م²)</span></div>
+        <div class="metric"><b id="mYard">0</b><span>ياردة²</span></div>
+        <div class="metric"><b id="mPerim">0</b><span>المحيط</span></div>
+        <div class="metric"><b id="mPts">0</b><span>عدد النقاط</span></div>
+        <div class="metric"><b id="mSides">0</b><span>عدد الأضلاع</span></div>
+      </div>
+      <div id="rectBox"></div>
+      <div style="font-size:12px;color:var(--mut);margin-bottom:7px">الأضلاع بالمتر والسنتيمتر — اختر الواجهة الرئيسية والثانوية:</div>
+      <div id="sidesList"></div>
+    </div>
+  </div>
+  <button class="btn no-print" onclick="go(1)" id="toDesign">التالي: متطلبات التصميم ←</button>
+</section>
+
+<!-- ============ 2) DESIGN WIZARD ============ -->
+<section class="view" id="view-design">
+  <div class="card">
+    <h3>نوع البناء والنمط</h3>
+    <div class="sub">إجاباتك تُستخدم لتوليد المقترحات — كل سؤال بضغطة واحدة.</div>
+    <div class="q"><label>نوع البناء <span class="req">*</span></label>
+      <div class="chips" data-k="buildType">
+        <button data-v="بيت سكني">بيت سكني</button><button data-v="فيلا">فيلا</button>
+        <button data-v="تجاري + سكني">تجاري + سكني</button><button data-v="عمارة شقق">عمارة شقق</button>
+      </div></div>
+    <div class="q"><label>النمط المعماري <span class="req">*</span></label>
+      <div class="chips" data-k="style">
+        <button data-v="عراقي تراثي">عراقي تراثي</button><button data-v="شرقي">شرقي</button>
+        <button data-v="غربي">غربي</button><button data-v="مودرن">مودرن</button><button data-v="اقتصادي">اقتصادي</button>
+      </div></div>
+    <div class="q"><label>عدد الطوابق</label>
+      <div class="stepper"><button onclick="step('floors',-1)">−</button><b id="st-floors">2</b><button onclick="step('floors',1)">+</button></div></div>
+  </div>
+
+  <div class="card">
+    <h3>الارتدادات والمساحات الفارغة</h3>
+    <div class="sub">المسافة الفارغة (حديقة/ممر) من كل جهة بالمتر — اكتب 0 إذا البناء على الحد.</div>
+    <div class="grid2">
+      <div class="numfield"><label>من الشمال (م)</label><input type="number" inputmode="decimal" id="sb-n" value="0" min="0" oninput="D.setbacks.n=+this.value;persist()"></div>
+      <div class="numfield"><label>من الجنوب (م)</label><input type="number" inputmode="decimal" id="sb-s" value="0" min="0" oninput="D.setbacks.s=+this.value;persist()"></div>
+      <div class="numfield"><label>من الشرق (م)</label><input type="number" inputmode="decimal" id="sb-e" value="0" min="0" oninput="D.setbacks.e=+this.value;persist()"></div>
+      <div class="numfield"><label>من الغرب (م)</label><input type="number" inputmode="decimal" id="sb-w" value="0" min="0" oninput="D.setbacks.w=+this.value;persist()"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>المداخل والخصوصية</h3>
+    <div class="q"><label>مكان الباب الرئيسي <span class="req">*</span></label>
+      <div class="chips" data-k="mainDoor">
+        <button data-v="على الواجهة الرئيسية">على الواجهة الرئيسية</button>
+        <button data-v="على الواجهة الثانوية">على الواجهة الثانوية</button>
+        <button data-v="ركن القطعة">ركن القطعة</button>
+      </div></div>
+    <div class="q"><label>باب ثانوي للخصوصية (للعائلة)؟ <span class="req">*</span></label>
+      <div class="chips" data-k="secondaryDoor"><button data-v="نعم">نعم</button><button data-v="لا">لا</button></div></div>
+    <div class="q"><label>استقبال الرجال / الديوانية <span class="req">*</span></label>
+      <div class="chips" data-k="diwaniya">
+        <button data-v="قرب المدخل مباشرة">قرب المدخل مباشرة</button>
+        <button data-v="منفصلة بمدخل خاص">منفصلة بمدخل خاص</button>
+        <button data-v="ضمن الصالة">ضمن الصالة</button>
+        <button data-v="لا يوجد">لا يوجد</button>
+      </div></div>
+    <div class="q"><label>استقبال النساء <span class="req">*</span></label>
+      <div class="chips" data-k="women">
+        <button data-v="صالة داخلية مستقلة">صالة داخلية مستقلة</button>
+        <button data-v="غرفة استقبال مستقلة">غرفة استقبال مستقلة</button>
+        <button data-v="ضمن المعيشة العائلية">ضمن المعيشة العائلية</button>
+      </div></div>
+    <div class="q"><label>مستوى العزل والخصوصية <span class="req">*</span></label>
+      <div class="chips" data-k="privacy">
+        <button data-v="عالي جداً (فصل تام)">عالي جداً</button>
+        <button data-v="عالي">عالي</button>
+        <button data-v="متوسط">متوسط</button>
+      </div></div>
+  </div>
+
+  <div class="card">
+    <h3>الفضاءات الداخلية</h3>
+    <div class="q"><label>غرف النوم</label>
+      <div class="stepper"><button onclick="step('bedrooms',-1)">−</button><b id="st-bedrooms">3</b><button onclick="step('bedrooms',1)">+</button></div></div>
+    <div class="q"><label>الحمامات</label>
+      <div class="stepper"><button onclick="step('baths',-1)">−</button><b id="st-baths">2</b><button onclick="step('baths',1)">+</button></div></div>
+    <div class="q"><label>المطبخ <span class="req">*</span></label>
+      <div class="chips" data-k="kitchen">
+        <button data-v="مغلق">مغلق</button><button data-v="مفتوح على الصالة">مفتوح</button>
+        <button data-v="مزدوج (رئيسي + تحضيري)">مزدوج (رئيسي + تحضيري)</button>
+      </div></div>
+    <div class="q"><label>الصالة <span class="req">*</span></label>
+      <div class="chips" data-k="hall">
+        <button data-v="صالة واحدة كبيرة">صالة واحدة كبيرة</button>
+        <button data-v="صالتان (ضيوف + معيشة)">صالتان</button>
+        <button data-v="معيشة عائلية فقط">معيشة عائلية فقط</button>
+      </div></div>
+    <div class="q"><label>الكردور <span class="req">*</span></label>
+      <div class="chips" data-k="corridor">
+        <button data-v="كردور مركزي">كردور مركزي</button>
+        <button data-v="توزيع مباشر بلا كردور">بلا كردور</button>
+        <button data-v="حسب رؤية المصمم">حسب المصمم</button>
+      </div></div>
+    <div class="q"><label>الكراج — عدد السيارات</label>
+      <div class="stepper"><button onclick="step('cars',-1)">−</button><b id="st-cars">1</b><button onclick="step('cars',1)">+</button></div></div>
+    <div class="q"><label>مكونات الطابق الثاني (اختيار متعدد)</label>
+      <div class="chips" data-k="floor2" data-multi="1">
+        <button data-v="غرف نوم">غرف نوم</button><button data-v="غرفة ماستر">ماستر</button>
+        <button data-v="صالة عائلية">صالة عائلية</button><button data-v="مطبخ تحضيري">مطبخ تحضيري</button>
+        <button data-v="حمامات">حمامات</button><button data-v="غرفة غسيل">غرفة غسيل</button>
+        <button data-v="تراس">تراس</button><button data-v="شقة مستقلة">شقة مستقلة</button>
+      </div></div>
+    <div class="q"><label>فئة التشطيب <span class="req">*</span></label>
+      <div class="chips" data-k="finish">
+        <button data-v="اقتصادي">اقتصادي</button><button data-v="متوسط">متوسط</button><button data-v="فاخر">فاخر</button>
+      </div></div>
+  </div>
+  <button class="btn" id="toProps" onclick="tryGoProps()">التالي: توليد المقترحات ←</button>
+</section>
+
+<!-- ============ 3) PROPOSALS ============ -->
+<section class="view" id="view-proposals">
+  <div class="card no-print">
+    <h3>محرك توليد المقترحات</h3>
+    <div class="sub">يُرسل ملخص الأرض والمتطلبات كـ JSON منظم إلى الذكاء الاصطناعي ويولّد ٤ مقترحات مختلفة.</div>
+    <button class="btn gold" id="genBtn" style="margin:0;width:100%" onclick="generate()">⚡ توليد ٤ مقترحات تصميم</button>
+    <div class="inline-btns" style="margin:10px 0 0"><button class="btn ghost" style="margin:0" onclick="downloadPayload()">⬇ JSON المشروع</button><button class="btn ghost" style="margin:0" onclick="copyMasterPrompt()">📋 برومبت هندسي</button></div>
+    <div id="genStatus" style="text-align:center;margin-top:12px;font-size:13px;color:var(--mut)"></div>
+  </div>
+  <div id="propsList"></div>
+  <button class="btn" id="toReport" onclick="go(3)" style="display:none">عرض التقرير النهائي ←</button>
+</section>
+
+<!-- ============ 4) REPORT ============ -->
+<section class="view" id="view-report">
+  <div class="inline-btns no-print">
+    <button class="btn" style="margin:0" onclick="printPDF()">🖨️ تقرير PDF <small style="font-weight:400">(10,000 د.ع)</small></button>
+    <button class="btn gold" style="margin:0" onclick="openShare()">👷 ناقش مع مهندس</button>
+  </div>
+  <div class="inline-btns no-print" style="margin-top:0">
+    <button class="btn ghost" style="margin:0" onclick="document.getElementById('impFile').click()">📥 فتح تقرير مستلم</button>
+  </div>
+  <input type="file" id="impFile" accept=".bannaa,.json" style="display:none" onchange="importReport(this)">
+  <input type="file" id="propImgFile" accept="image/*" multiple style="display:none" onchange="attachImgs(this)">
+  <div id="report"><div style="text-align:center;color:#888;padding:30px">أكمل الخطوات السابقة لتوليد التقرير</div></div>
+</section>
+
+<!-- ============ MODALS ============ -->
+<div class="modal" id="m-gps"><div class="box">
+  <h3>إضافة نقطة GPS يدوياً</h3>
+  <div class="row">
+    <input class="txt" id="gpsLat" placeholder="خط العرض Lat — مثال 33.3512" inputmode="decimal">
+    <input class="txt" id="gpsLng" placeholder="خط الطول Lng — مثال 43.7821" inputmode="decimal">
+  </div>
+  <div class="row">
+    <button class="btn" style="margin:0;flex:1" onclick="addGPS()">إضافة النقطة</button>
+    <button class="btn ghost" style="margin:0;flex:1" onclick="closeModals()">إغلاق</button>
+  </div>
+  <div style="font-size:11.5px;color:var(--mut)">يمكنك نسخ الإحداثيات من جهاز GPS أو من كوكل ماب ولصقها هنا نقطة بعد نقطة.</div>
+</div></div>
+
+<div class="modal" id="m-settings"><div class="box">
+  <h3>الإعدادات</h3>
+  <div class="q"><label>رابط بروكسي الذكاء الاصطناعي (Cloudflare Worker)</label>
+    <input class="txt" id="proxyUrl" placeholder="https://your-worker.workers.dev (اتركه فارغاً داخل Claude)">
+  </div>
+  <div style="font-size:11.5px;color:var(--mut);line-height:1.8;margin-bottom:12px">
+    داخل معاينة Claude يعمل التوليد مباشرة بدون مفتاح. عند النشر على Cloudflare Pages ضع رابط الـWorker الوسيط (نفس نمط عبقرينو). إذا تعذر الاتصال يولّد التطبيق مقترحات محلية تلقائياً.
+  </div>
+  <button class="btn" style="margin:0;width:100%" onclick="saveSettings()">حفظ</button>
+</div></div>
+
+<div class="modal" id="m-share"><div class="box">
+  <h3>👷 ناقش مع مهندس أو شخص آخر</h3>
+  <div style="font-size:13px;line-height:1.9;margin-bottom:12px">
+    أرسل تقريرك <b>مجاناً (٣ مرات)</b> كملف <b>.bannaa</b> لأي مهندس أو صديق.<br>
+    ⚠️ الملف <b>لا يفتح إلا داخل تطبيق بنّاء AI</b> — على المستلم تنزيل التطبيق ثم الضغط على "📥 فتح تقرير مستلم".
+  </div>
+  <div style="background:#EFF3F8;border:1px solid var(--line);border-radius:11px;padding:10px;text-align:center;font-size:13px;margin-bottom:12px">
+    المشاركات المجانية المتبقية: <b id="shLeft" style="color:var(--navy);font-size:16px">3</b> من 3
+  </div>
+  <div class="row">
+    <button class="btn" style="margin:0;flex:1" onclick="doShareFile()">📤 مشاركة ملف التقرير</button>
+    <button class="btn ghost" style="margin:0;flex:1" onclick="closeModals()">إغلاق</button>
+  </div>
+  <div style="font-size:11.5px;color:var(--mut);line-height:1.8">بعد استهلاك المشاركات الثلاث، يبقى متاحاً التقرير الكامل PDF بعد الدفع (10,000 د.ع).</div>
+</div></div>
+
+<div class="modal" id="m-pay"><div class="box">
+  <h3>🖨️ تقرير PDF الكامل — 10,000 د.ع</h3>
+  <button class="btn gold" style="margin:0 0 10px;width:100%;font-size:16px" onclick="zcPay()">💳 ادفع الآن عبر زين كاش</button>
+  <div id="zcStatus" style="text-align:center;font-size:12.5px;color:var(--mut);margin-bottom:12px">دفع آمن تلقائي — تُحوَّل لصفحة زين كاش وترجع للتطبيق مفعّلاً</div>
+  <details style="margin-bottom:10px">
+    <summary style="font-size:12.5px;color:var(--steel);cursor:pointer;font-weight:700">طريقة بديلة: تفعيل يدوي برمز (واتساب)</summary>
+    <div style="font-size:12px;line-height:1.9;margin:8px 0">حوّل 10,000 د.ع وأرسل الوصل واتساب <b dir="ltr">+964 781 015 1042</b> ليصلك رمز التفعيل:</div>
+    <div class="row"><input class="txt" id="payPhone" placeholder="رقم هاتفك (07xxxxxxxxx)" inputmode="tel"></div>
+    <div class="row"><input class="txt" id="payCode" placeholder="رمز التفعيل (6 رموز)" style="text-align:center;letter-spacing:3px" autocapitalize="characters"></div>
+    <button class="btn" style="margin:0;width:100%" onclick="verifyPay()">✓ تفعيل بالرمز</button>
+  </details>
+  <button class="btn ghost" style="margin:0;width:100%" onclick="closeModals()">لاحقاً</button>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= STATE ================= */
+const DEF_D = ()=>({buildType:null,style:null,floors:2,setbacks:{n:0,s:0,e:0,w:0},mainDoor:null,secondaryDoor:null,
+  diwaniya:null,women:null,privacy:null,bedrooms:3,baths:2,kitchen:null,hall:null,corridor:null,cars:1,floor2:[],finish:null});
+let S = {project:'',pts:[],mainSide:null,secSide:null,design:DEF_D(),proposals:null,propImgs:{},useRect:false};
+let D = S.design;
+try{ const sv=JSON.parse(localStorage.getItem('bannaaAI')||'null'); if(sv){S=sv;D=S.design=Object.assign(DEF_D(),S.design);S.propImgs=S.propImgs||{};} }catch(e){}
+function persist(){ localStorage.setItem('bannaaAI',JSON.stringify(S)); }
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2400); }
+
+/* ===== تنسيق الأطوال: متر + سنتيمتر ===== */
+const fmt=(v,d=1)=>Number(v).toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:d});
+function fmtLen(m){ const cm=Math.round(m*100); const M=Math.floor(cm/100), C=cm%100;
+  return C===0? `${M} م` : `${M} م ${C} سم`; }
+
+/* ================= NAV ================= */
+function landDone(){ return S.pts.length>=3; }
+function designDone(){ return ['buildType','style','mainDoor','secondaryDoor','diwaniya','women','privacy','kitchen','hall','corridor','finish'].every(k=>D[k]); }
+function go(i){
+  if(i===2 && !landDone()){ toast('⚠️ ارسم حدود القطعة أولاً (٣ نقاط على الأقل)'); return; }
+  if(i===2 && !designDone()){ toast('⚠️ أكمل أسئلة المتطلبات المعلّمة بـ *'); go(1); return; }
+  if(i===3 && !S.proposals){ toast('⚠️ ولّد المقترحات أولاً'); return; }
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(['view-land','view-design','view-proposals','view-report'][i]).classList.add('active');
+  document.getElementById('tab-'+i).classList.add('active');
+  refreshTabs();
+  if(i===0) setTimeout(()=>map.invalidateSize(),60);
+  if(i===3) renderReport();
+}
+function refreshTabs(){
+  document.getElementById('tab-0').classList.toggle('done',landDone());
+  document.getElementById('tab-1').classList.toggle('done',designDone());
+  document.getElementById('tab-2').classList.toggle('done',!!S.proposals);
+}
+function tryGoProps(){ go(2); }
+function toggleSheet(){ document.getElementById('sheet').classList.toggle('collapsed'); setTimeout(()=>map.invalidateSize(),80); }
+function toggleFull(){ document.body.classList.toggle('mapfull');
+  document.getElementById('t-full').textContent = document.body.classList.contains('mapfull')?'✕':'⛶';
+  setTimeout(()=>map.invalidateSize(),80); }
+
+/* ================= MAP ================= */
+const map = L.map('map',{zoomControl:false,attributionControl:true}).setView([33.353,43.786],14);
+L.control.zoom({position:'bottomright'}).addTo(map);
+const layers = {
+  esri: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:22,maxNativeZoom:19,attribution:'Esri World Imagery'}),
+  osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}),
+  ghyb: L.tileLayer('https://mt1.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{maxZoom:22,maxNativeZoom:21,attribution:'Google optional'})
+};
+let curBase='esri'; layers.esri.addTo(map);
+function setBase(k){ if(!layers[k]) return; map.removeLayer(layers[curBase]); curBase=k; layers[k].addTo(map);
+  document.querySelectorAll('.base-chips button').forEach(b=>b.classList.remove('on'));
+  const el=document.getElementById('b-'+k); if(el) el.classList.add('on'); }
+
+let mode='add', rectFirst=null, markers=[], polyLayer=null, sideTags=[], rectLayer=null;
+function setMode(m){ mode=(mode===m?null:m); rectFirst=null;
+  document.getElementById('t-add').classList.toggle('on',mode==='add');
+  document.getElementById('t-rect').classList.toggle('on',mode==='rect');
+  document.getElementById('hint').textContent = mode==='rect' ? 'اضغط على ركنين متقابلين لرسم مستطيل' : 'اضغط لإضافة نقطة · اسحب النقطة لتعديلها · اضغط عليها لحذفها';
+}
+map.on('click',e=>{
+  if(mode==='add'){ S.pts.push({lat:e.latlng.lat,lng:e.latlng.lng}); redraw(); }
+  else if(mode==='rect'){
+    if(!rectFirst){ rectFirst=e.latlng; toast('اضغط الركن المقابل'); }
+    else{ const a=rectFirst,b=e.latlng;
+      S.pts=[{lat:a.lat,lng:a.lng},{lat:a.lat,lng:b.lng},{lat:b.lat,lng:b.lng},{lat:b.lat,lng:a.lng}];
+      rectFirst=null; setMode(null); redraw(); }
+  }
+});
+function locateMe(){ if(!navigator.geolocation){toast('GPS غير متاح');return;}
+  navigator.geolocation.getCurrentPosition(p=>{
+    map.setView([p.coords.latitude,p.coords.longitude],19);
+    BannaaGeoFix.gpsAccuracy = p.coords.accuracy;   // ✅ v7.1: سجّل الدقة
+    toast('📍 موقعك الحالي (دقة ±'+p.coords.accuracy.toFixed(0)+' م)');
+    softRedraw&&softRedraw();
+  },()=>toast('تعذر تحديد الموقع'),{enableHighAccuracy:true}); }
+
+/* ✅ v7.1 — التقاط نقطة بمتوسط مرجّح (يقلل الخطأ 3-5 أضعاف)
+   الوزن = 1/دقة² — القراءات الأدق تؤثر أكثر */
+let _capturing=false;
+function captureAveraged(seconds){
+  seconds = seconds || 20;
+  if(!navigator.geolocation){toast('GPS غير متاح');return;}
+  if(_capturing){toast('جارٍ التقاط نقطة بالفعل…');return;}
+  _capturing=true;
+  const samples=[]; const t0=Date.now();
+  const wid=navigator.geolocation.watchPosition(p=>{
+    const c=p.coords;
+    if(c.accuracy>20) return;                       // ارفض القراءات السيئة
+    samples.push({lon:c.longitude,lat:c.latitude,acc:Math.max(c.accuracy,0.5)});
+    const el=Math.round((Date.now()-t0)/1000);
+    toast('⏳ تثبيت '+el+'/'+seconds+' ث — ±'+c.accuracy.toFixed(1)+' م ('+samples.length+' قراءة)');
+  },e=>{},{enableHighAccuracy:true,maximumAge:0,timeout:10000});
+
+  setTimeout(()=>{
+    navigator.geolocation.clearWatch(wid); _capturing=false;
+    if(samples.length<3){toast('⚠ قراءات غير كافية — قف بمكان مفتوح');return;}
+    let sw=0,slon=0,slat=0;
+    samples.forEach(s=>{ const w=1/(s.acc*s.acc); sw+=w; slon+=s.lon*w; slat+=s.lat*w; });
+    const lon=slon/sw, lat=slat/sw;
+    const accT=Math.sqrt(1/sw);
+    let sq=0; samples.forEach(s=>{ const d=BannaaGeoFix.distance(lon,lat,s.lon,s.lat); sq+=d*d; });
+    const spread=Math.sqrt(sq/samples.length);
+    const acc=Math.max(accT,spread);               // تقدير محافظ وأمين
+    BannaaGeoFix.gpsAccuracy=acc;
+    S.pts.push({lat:lat,lng:lon}); redraw(); persist&&persist();
+    map.setView([lat,lon],Math.max(map.getZoom(),18));
+    toast('✓ نقطة '+S.pts.length+' — دقة ±'+acc.toFixed(1)+' م من '+samples.length+' قراءة');
+  }, seconds*1000);
+}
+function undoPt(){ if(!S.pts.length){toast('لا توجد نقاط');return;} S.pts.pop();
+  if(S.mainSide!=null&&S.mainSide>=S.pts.length)S.mainSide=null;
+  if(S.secSide!=null&&S.secSide>=S.pts.length)S.secSide=null;
+  redraw(); toast('↩️ تم التراجع عن آخر نقطة'); }
+function delPt(i){ S.pts.splice(i,1);
+  if(S.mainSide===i)S.mainSide=null; else if(S.mainSide>i)S.mainSide--;
+  if(S.secSide===i)S.secSide=null; else if(S.secSide>i)S.secSide--;
+  map.closePopup(); redraw(); toast('🗑 حُذفت النقطة'); }
+function clearPts(){ if(S.pts.length&&!confirm('مسح جميع النقاط؟'))return; S.pts=[];S.mainSide=null;S.secSide=null; redraw(); }
+function addGPS(){ const la=parseFloat(document.getElementById('gpsLat').value), ln=parseFloat(document.getElementById('gpsLng').value);
+  if(isNaN(la)||isNaN(ln)){toast('إحداثيات غير صحيحة');return;}
+  S.pts.push({lat:la,lng:ln}); redraw(); map.setView([la,ln],Math.max(map.getZoom(),18));
+  document.getElementById('gpsLat').value=''; document.getElementById('gpsLng').value=''; toast('✓ أُضيفت النقطة '+S.pts.length); }
+function zoomToPlot(){ if(S.pts.length<2)return; map.fitBounds(L.latLngBounds(S.pts.map(p=>[p.lat,p.lng])).pad(.3)); }
+
+const DIRS=['شمالي','شمالي شرقي','شرقي','جنوبي شرقي','جنوبي','جنوبي غربي','غربي','شمالي غربي'];
+function dirName(b){ return DIRS[Math.round(((b%360)+360)%360/45)%8]; }
+function dirQuad(b){ return ['n','e','s','w'][Math.round(((b%360)+360)%360/90)%4]; }
+
+function getPoly(){ if(S.pts.length<3)return null;
+  const ring=S.pts.map(p=>[p.lng,p.lat]); ring.push([S.pts[0].lng,S.pts[0].lat]);
+  try{ return turf.polygon([ring]); }catch(e){ return null; } }
+
+/* ✅ مُصحّح v7.1 — كان يحسب الزاوية من مركز القطعة إلى منتصف الضلع،
+   وهو ليس اتجاه الضلع. الآن يُحسب الأزيموث الحقيقي على طول الضلع.
+   dir  = اتجاه الضلع نفسه | face = اتجاه الواجهة (عمودي للخارج) */
+function calcSides(){
+  return BannaaGeoFix.calcSidesFixed(S.pts, S.dirSectors||16);
+}
+
+/* ===== أكبر مستطيل بناء داخل القطعة (موازٍ للواجهة الرئيسية) ===== */
+let _rectCache={key:'',val:null};
+function inscribedRect(){
+  if(S.pts.length<3) return null;
+  const key=JSON.stringify(S.pts)+'|'+S.mainSide;
+  if(_rectCache.key===key) return _rectCache.val;
+  const lat0=S.pts.reduce((t,p)=>t+p.lat,0)/S.pts.length;
+  const lng0=S.pts.reduce((t,p)=>t+p.lng,0)/S.pts.length;
+  const mxs=111320*Math.cos(lat0*Math.PI/180), mys=110540;
+  let Q=S.pts.map(p=>({x:(p.lng-lng0)*mxs,y:(p.lat-lat0)*mys}));
+  const sides=calcSides(); if(!sides.length){_rectCache={key,val:null};return null;}
+  const ref=(S.mainSide!=null? sides.find(s=>s.i===S.mainSide):null)||sides.reduce((a,b)=>a.len>b.len?a:b);
+  const a=Q[ref.i], b=Q[(ref.i+1)%Q.length];
+  const ang=Math.atan2(b.y-a.y,b.x-a.x), c1=Math.cos(-ang), s1=Math.sin(-ang);
+  Q=Q.map(p=>({x:p.x*c1-p.y*s1, y:p.x*s1+p.y*c1}));
+  const xs=Q.map(p=>p.x), ys=Q.map(p=>p.y);
+  const minx=Math.min(...xs), maxx=Math.max(...xs), miny=Math.min(...ys), maxy=Math.max(...ys);
+  const W=maxx-minx, H=maxy-miny; if(W<1||H<1){_rectCache={key,val:null};return null;}
+  const N=110, cw=W/N, ch=H/N;
+  const pip=(x,y)=>{let c=false;for(let i=0,j=Q.length-1;i<Q.length;j=i++){
+    if(((Q[i].y>y)!=(Q[j].y>y))&&(x<(Q[j].x-Q[i].x)*(y-Q[i].y)/(Q[j].y-Q[i].y)+Q[i].x))c=!c;}return c;};
+  const hist=new Array(N).fill(0); let best={area:0};
+  for(let r=0;r<N;r++){
+    const y=miny+(r+0.5)*ch;
+    for(let col=0;col<N;col++) hist[col]=pip(minx+(col+0.5)*cw,y)?hist[col]+1:0;
+    const st=[];
+    for(let col=0;col<=N;col++){
+      const h=col<N?hist[col]:0; let start=col;
+      while(st.length&&st[st.length-1].h>=h){
+        const t=st.pop(); const area=t.h*ch*(col-t.start)*cw;
+        if(area>best.area)best={area,h:t.h,c0:t.start,c1:col,r1:r};
+        start=t.start;
+      }
+      st.push({h,start});
+    }
+  }
+  if(best.area<1){_rectCache={key,val:null};return null;}
+  const rw=(best.c1-best.c0)*cw, rh=best.h*ch;
+  const x0=minx+best.c0*cw, x1=minx+best.c1*cw;
+  const y1=miny+(best.r1+1)*ch, y0=y1-rh;
+  const c2=Math.cos(ang), s2=Math.sin(ang);
+  const corners=[[x0,y0],[x1,y0],[x1,y1],[x0,y1]].map(([x,y])=>{
+    const X=x*c2-y*s2, Y=x*s2+y*c2;
+    return {lat:lat0+Y/mys, lng:lng0+X/mxs};
+  });
+  const val={width:rw, depth:rh, area:rw*rh, corners};
+  _rectCache={key,val}; return val;
+}
+function toggleRect(){ S.useRect=!S.useRect; persist(); softRedraw(); }
+
+/* ===== ترجمة المصطلحات للبرومبت الإنجليزي ===== */
+const DIR_EN={'شمالي':'north','شمالي شرقي':'north-east','شرقي':'east','جنوبي شرقي':'south-east','جنوبي':'south','جنوبي غربي':'south-west','غربي':'west','شمالي غربي':'north-west'};
+const STYLE_EN={'عراقي تراثي':'traditional Iraqi heritage with shanasheel-inspired details','شرقي':'oriental Middle-Eastern','غربي':'western contemporary','مودرن':'modern minimalist','اقتصادي':'simple cost-efficient'};
+const FINISH_EN={'اقتصادي':'budget','متوسط':'mid-range','فاخر':'luxury high-end'};
+
+/* ===== مولد برومبت 3D غني بكل بيانات الموقع ===== */
+function buildPrompt3D(hint){
+  const sides=calcSides(); const R=inscribedRect();
+  const pg=getPoly(); const area=pg?turf.area(pg):0;
+  const main=S.mainSide!=null? sides.find(s=>s.i===S.mainSide):null;
+  const sec=S.secSide!=null? sides.find(s=>s.i===S.secSide):null;
+  const sidesTxt=sides.map(s=>`${DIR_EN[s.dir]||s.dir} ${s.len.toFixed(1)}m`).join(', ');
+  const mainTxt=main? `main street on the ${DIR_EN[main.dir]} side with a ${main.len.toFixed(1)}m frontage`:'main street on the front side';
+  const secTxt=sec? `, adjacent secondary street on the ${DIR_EN[sec.dir]} side (${sec.len.toFixed(1)}m corner plot)`:'';
+  const rectTxt=R? `; largest buildable rectangle ${R.width.toFixed(1)}m wide (parallel to the main street) x ${R.depth.toFixed(1)}m deep = ${Math.round(R.area)} sqm${S.useRect?' — the building footprint MUST stay strictly within this rectangle':''}`:'';
+  return `Award-winning architectural visualization, photorealistic 3D exterior render of a ${STYLE_EN[D.style]||'modern'} ${D.floors}-storey Iraqi family ${D.buildType==='فيلا'?'villa':'house'} in Anbar, Iraq.
+SITE: ${Math.round(area)} sqm plot, boundary sides: ${sidesTxt}; ${mainTxt}${secTxt}${rectTxt}; garden setbacks N ${D.setbacks.n}m / S ${D.setbacks.s}m / E ${D.setbacks.e}m / W ${D.setbacks.w}m.
+ARCHITECTURE: ${hint||'strong horizontal massing with cantilevered upper floor, double-height recessed entrance'}, warm Iraqi yellow brick (tabouk) and travertine stone facade, mashrabiya-inspired perforated privacy screens on upper windows, deep roof overhangs for sun shading, dark anthracite aluminum frames, main entrance and ${D.cars>0?`carport for ${D.cars} car${D.cars>1?'s':''}`:'pedestrian gate'} facing the ${main?DIR_EN[main.dir]:'main'} street, ${FINISH_EN[D.finish]||'mid-range'} finishing level.
+LANDSCAPE: stone boundary wall with dark steel gate, date palms and olive trees, drought-tolerant desert landscaping, large-format paver driveway, linear water feature beside the entrance path, warm pathway uplights.
+LIGHTING: golden hour, low warm sun, long soft shadows, gentle haze, interior glow through the screens, clear gradient sky.
+CAMERA: street-level three-quarter view from the ${main?DIR_EN[main.dir]:'main'} street, 24mm tilt-shift lens, eye height 1.6m, slight foreground depth of field.
+QUALITY: V-Ray / Corona render style, physically accurate materials, global illumination, 8k, ultra detailed, architectural photography.`;
+}
+
+function redraw(){
+  markers.forEach(m=>map.removeLayer(m)); markers=[];
+  sideTags.forEach(t=>map.removeLayer(t)); sideTags=[];
+  if(polyLayer){map.removeLayer(polyLayer);polyLayer=null;}
+  S.pts.forEach((p,i)=>{
+    const mk=L.marker([p.lat,p.lng],{draggable:true,icon:L.divIcon({className:'vtx',html:`<div class="dot">${i+1}</div>`,iconSize:[30,30],iconAnchor:[15,15]})}).addTo(map);
+    mk.bindPopup(`<div style="text-align:center"><div style="font-size:12px;margin-bottom:7px;color:#1C3552;font-weight:700">النقطة ${i+1}</div><button class="del-pt" onclick="delPt(${i})">🗑 حذف هذه النقطة</button></div>`,{closeButton:false});
+    mk.on('drag',e=>{ S.pts[i]={lat:e.latlng.lat,lng:e.latlng.lng}; softRedraw(); });
+    mk.on('dragend',()=>redraw());
+    markers.push(mk);
+  });
+  drawPolyAndTags(); updateMetrics(); persist(); refreshTabs();
+}
+function softRedraw(){ drawPolyAndTags(); updateMetrics(); }
+function drawPolyAndTags(){
+  if(polyLayer)map.removeLayer(polyLayer);
+  sideTags.forEach(t=>map.removeLayer(t)); sideTags=[];
+  if(S.pts.length>=2){
+    polyLayer = S.pts.length>=3
+      ? L.polygon(S.pts.map(p=>[p.lat,p.lng]),{color:'#E3C45A',weight:3,fillColor:'#E3C45A',fillOpacity:.16}).addTo(map)
+      : L.polyline(S.pts.map(p=>[p.lat,p.lng]),{color:'#E3C45A',weight:3}).addTo(map);
+    calcSides().forEach(s=>{
+      const tg=L.marker([s.mid[1],s.mid[0]],{interactive:false,icon:L.divIcon({className:'side-tag',html:`<span>${fmtLen(s.len)}</span>`,iconSize:[0,0]})}).addTo(map);
+      sideTags.push(tg);
+    });
+  }
+  if(rectLayer){map.removeLayer(rectLayer);rectLayer=null;}
+  const R=inscribedRect();
+  if(R){ rectLayer=L.polygon(R.corners.map(c=>[c.lat,c.lng]),
+    {color:'#4FA3E8',weight:2.5,dashArray:'7,6',fill:!!S.useRect,fillColor:'#4FA3E8',fillOpacity:.12,interactive:false}).addTo(map); }
+}
+function updateMetrics(){
+  const pg=getPoly(); const area= pg? turf.area(pg):0;
+  const sides=calcSides(); const perim=sides.reduce((t,s)=>t+s.len,0);
+  /* ✅ v7.1 — اعرض عدم اليقين بدل ادعاء دقة غير موجودة */
+  const _acc=BannaaGeoFix.gpsAccuracy;
+  const _sig=_acc? BannaaGeoFix.areaUncertainty(perim,_acc,S.pts.length):null;
+  const _cf=BannaaGeoFix.confidence(_sig,area);
+  document.getElementById('areaBig').innerHTML = _sig
+    ? `${fmt(area)} <small>± ${Math.round(_sig)} م² · ${fmt(area/2500,3)} دونم</small>`
+      + `<div style="font-size:10.5px;font-weight:600;color:${_cf.color};margin-top:2px">`
+      + `دقة GPS ±${_acc.toFixed(1)} م — ثقة ${_cf.ar}</div>`
+    : `${fmt(area)} <small>م² · ${fmt(area/2500,3)} دونم</small>`;
+  document.getElementById('mDonum').textContent=fmt(area/2500,3);
+  document.getElementById('mOlek').textContent=fmt(area/100,2);
+  document.getElementById('mYard').textContent=fmt(area*1.19599,0);
+  document.getElementById('mPerim').textContent=fmtLen(perim);
+  document.getElementById('mPts').textContent=S.pts.length;
+  document.getElementById('mSides').textContent=S.pts.length>=3?S.pts.length:Math.max(0,S.pts.length-1);
+  const L1=document.getElementById('sidesList'); L1.innerHTML='';
+  sides.forEach(s=>{
+    const r=document.createElement('div'); r.className='side-row';
+    r.innerHTML=`<span>ضلع ${s.i+1}</span><span class="len">${fmtLen(s.len)}</span><span class="dir" title="اتجاه الضلع ${s.dms} — الواجهة نحو ${s.face}">${s.dir}</span><span class="grow"></span>
+      <button class="fchip ${S.mainSide===s.i?'on-main':''}" onclick="setFront(${s.i},'main')">رئيسية</button>
+      <button class="fchip ${S.secSide===s.i?'on-sec':''}" onclick="setFront(${s.i},'sec')">ثانوية</button>`;
+    L1.appendChild(r);
+  });
+  const rb=document.getElementById('rectBox'); const R=inscribedRect();
+  rb.innerHTML=R?`<div class="side-row" style="border:1.5px solid #4FA3E8;background:#EFF6FD">
+    <span style="font-weight:700;color:#1D6FB8">▭ أكبر مستطيل بناء</span>
+    <span class="len">${fmtLen(R.width)} × ${fmtLen(R.depth)}</span>
+    <span class="dir">${fmt(R.area,0)} م²</span><span class="grow"></span>
+    <button class="fchip ${S.useRect?'on-sec':''}" onclick="toggleRect()">التقيد به بالبناء</button>
+  </div><div style="font-size:10.5px;color:var(--mut);margin:-2px 4px 8px">العرض موازٍ للواجهة الرئيسية — يُحسب تلقائياً من نقاط GPS</div>`:'';
+}
+function setFront(i,t){ if(t==='main'){ S.mainSide=(S.mainSide===i?null:i); if(S.secSide===i)S.secSide=null; }
+  else { S.secSide=(S.secSide===i?null:i); if(S.mainSide===i)S.mainSide=null; }
+  softRedraw(); persist(); }
+
+/* ✅ مُصحّح v7.1 — GeoJSON مطابق RFC 7946:
+   FeatureCollection + bbox + عدم اليقين + أزيموث لكل ضلع */
+function geojson(){
+  const sides=calcSides(), pg=getPoly();
+  const area = pg? turf.area(pg) : 0;
+  const perim = sides.reduce((t,s)=>t+s.len,0);
+  const acc = BannaaGeoFix.gpsAccuracy;
+  const sigma = acc? BannaaGeoFix.areaUncertainty(perim, acc, S.pts.length) : null;
+  const conf = BannaaGeoFix.confidence(sigma, area);
+  const ring = pg? pg.geometry.coordinates[0] : null;
+  const bb = ring? (()=>{ const lo=ring.map(p=>p[0]), la=ring.map(p=>p[1]);
+    return [Math.min(...lo),Math.min(...la),Math.max(...lo),Math.max(...la)]; })() : null;
+
+  const feature={type:'Feature',
+    bbox: bb||undefined,
+    properties:{
+      name:S.project||'قطعة أرض', app:'بنّاء AI', app_version:'7.1',
+      vendor:'دار الإبداع للحلول البرمجية',
+      area_m2:+area.toFixed(1),
+      area_m2_uncertainty: sigma!=null? +sigma.toFixed(0) : null,
+      area_display: sigma!=null? Math.round(area)+' ± '+Math.round(sigma)+' م²'
+                               : Math.round(area)+' م²',
+      area_donum:+(area/2500).toFixed(4),
+      area_ulunk:+(area/100).toFixed(2),
+      perimeter_m:+perim.toFixed(2),
+      measurement:{
+        crs_source:'EPSG:4326',
+        area_algorithm:'geodesic (WGS84 ellipsoid, Gaussian mean radius)',
+        distance_algorithm:'Vincenty inverse (WGS84)',
+        gps_accuracy_m: acc,
+        confidence: conf.ar
+      },
+      sides:sides.map(s=>({
+        n:s.i+1,
+        length_m:+s.len.toFixed(2),
+        azimuth_deg:+s.az.toFixed(1),
+        bearing_dms:s.dms,
+        direction:s.dir,
+        faces:s.face,
+        frontage:S.mainSide===s.i?'main':S.secSide===s.i?'secondary':null})),
+      created:new Date().toISOString()},
+    geometry: pg? pg.geometry : {type:'MultiPoint',coordinates:S.pts.map(p=>[p.lng,p.lat])}};
+
+  return { type:'FeatureCollection', bbox: bb||undefined, features:[feature] };
+}
+function dlGeoJSON(){ if(!S.pts.length){toast('لا توجد نقاط');return;}
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(geojson(),null,2)],{type:'application/geo+json'}));
+  a.download=(S.project||'bannaa-plot').replace(/\s+/g,'-')+'.geojson'; a.click(); toast('⬇ تم تنزيل GeoJSON'); }
+
+/* ================= WIZARD ================= */
+document.querySelectorAll('.chips[data-k]').forEach(g=>{
+  const k=g.dataset.k, multi=g.dataset.multi;
+  g.querySelectorAll('button').forEach(b=>{
+    b.onclick=()=>{
+      if(multi){ const arr=D[k]||[]; const ix=arr.indexOf(b.dataset.v);
+        ix>=0?arr.splice(ix,1):arr.push(b.dataset.v); D[k]=arr; b.classList.toggle('on'); }
+      else{ D[k]=b.dataset.v; g.querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); }
+      persist(); refreshTabs();
+    };
+  });
+});
+const STEP_LIM={floors:[1,4],bedrooms:[1,10],baths:[1,8],cars:[0,6]};
+function step(k,d){ const[mn,mx]=STEP_LIM[k]; D[k]=Math.min(mx,Math.max(mn,(D[k]??mn)+d));
+  document.getElementById('st-'+k).textContent=D[k]; persist(); }
+function hydrate(){
+  document.getElementById('projName').value=S.project||'';
+  ['floors','bedrooms','baths','cars'].forEach(k=>document.getElementById('st-'+k).textContent=D[k]);
+  ['n','s','e','w'].forEach(q=>document.getElementById('sb-'+q).value=D.setbacks[q]||0);
+  document.querySelectorAll('.chips[data-k]').forEach(g=>{
+    const k=g.dataset.k,v=D[k];
+    g.querySelectorAll('button').forEach(b=>{
+      b.classList.toggle('on', g.dataset.multi? (v||[]).includes(b.dataset.v) : v===b.dataset.v);
+    });
+  });
+  document.getElementById('proxyUrl').value=localStorage.getItem('bannaa_ai_proxy_url')||'';
+  if(S.pts.length) setTimeout(()=>{redraw();zoomToPlot();},250); else refreshTabs();
+}
+
+/* ================= AI ENGINE ================= */
+function landSummary(){
+  const pg=getPoly(); const sides=calcSides(); const R=inscribedRect();
+  const main=S.mainSide!=null? sides.find(s=>s.i===S.mainSide):null;
+  const sec=S.secSide!=null? sides.find(s=>s.i===S.secSide):null;
+  return { area_m2:+(pg?turf.area(pg):0).toFixed(1), donum:+((pg?turf.area(pg):0)/2500).toFixed(3),
+    perimeter_m:+sides.reduce((t,s)=>t+s.len,0).toFixed(1),
+    sides:sides.map(s=>({n:s.i+1,length_m:+s.len.toFixed(2),direction:s.dir,direction_en:DIR_EN[s.dir]||s.dir})),
+    main_street:{direction:main?main.dir:'غير محددة',direction_en:main?DIR_EN[main.dir]:null,frontage_length_m:main?+main.len.toFixed(1):null},
+    secondary_street:sec?{direction:sec.dir,direction_en:DIR_EN[sec.dir],length_m:+sec.len.toFixed(1)}:null,
+    largest_buildable_rectangle:R?{width_m_parallel_to_main_street:+R.width.toFixed(1),depth_m:+R.depth.toFixed(1),area_m2:Math.round(R.area)}:null,
+    building_must_stay_within_rectangle:!!S.useRect };
+}
+function payload(){ return {land:landSummary(),requirements:D,project:S.project||'مشروع بدون اسم', buildable:buildableAnalysis()}; }
+
+function designBrief(){
+  const ls=landSummary();
+  return `صمم ${D.buildType||'بيت سكني'} بنمط ${D.style||'عراقي'} على قطعة مساحتها ${ls.area_m2} م²، الواجهة الرئيسية ${ls.main_street.direction} بطول ${ls.main_street.frontage_length_m||'غير محدد'} م، ${D.floors} طابق، ${D.bedrooms} غرف، ${D.baths} حمامات، مطبخ ${D.kitchen||'مغلق'}، صالة ${D.hall||'عائلية'}، ديوانية ${D.diwaniya||'منفصلة'}، خصوصية ${D.privacy||'عالية'}، ارتدادات ش${D.setbacks.n}/ج${D.setbacks.s}/شر${D.setbacks.e}/غ${D.setbacks.w} م، تشطيب ${D.finish||'متوسط'}.`;
+}
+function masterPrompt(){
+  return `أنت مهندس معماري عراقي. المطلوب توليد مخطط 2D ومقترح 3D أولي قابل للنقاش مع مهندس، بناءً على هذا الملخص:\n${designBrief()}\n\nبيانات الأرض JSON:\n${JSON.stringify(payload(),null,2)}\n\nالمطلوب: 4 بدائل مختلفة، لكل بديل: توزيع غرف، مداخل، خصوصية، تهوية، فتحات، تقدير كلفة، وملاحظات تنفيذية. لا تعتبر الناتج مخططاً تنفيذياً نهائياً.`;
+}
+function copyMasterPrompt(){
+  const p=masterPrompt();
+  if(navigator.clipboard) navigator.clipboard.writeText(p).then(()=>toast('📋 نُسخ البرومبت الهندسي')).catch(()=>alert(p));
+  else alert(p);
+}
+function downloadPayload(){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(payload(),null,2)],{type:'application/json'}));
+  a.download=(S.project||'bannaa-project').replace(/\s+/g,'-')+'.json'; a.click(); toast('⬇ تم تنزيل JSON المشروع');
+}
+function buildableAnalysis(){
+  const pg=getPoly(); const area=pg?turf.area(pg):0; const R=inscribedRect();
+  const sb=D.setbacks||{n:0,s:0,e:0,w:0};
+  const avgSet=(+sb.n + +sb.s + +sb.e + +sb.w)/4;
+  let footprint=area*Math.max(.28, Math.min(.78, 1-(avgSet/22)));
+  if(R){
+    const w=Math.max(0,R.width-(+sb.e||0)-(+sb.w||0));
+    const d=Math.max(0,R.depth-(+sb.n||0)-(+sb.s||0));
+    footprint=Math.min(footprint,w*d);
+  }
+  if(S.useRect && R) footprint=Math.min(footprint,R.area);
+  const ratio=area? footprint/area : 0;
+  const BA=footprint + (D.floors>1 ? footprint*0.85*(D.floors-1) : 0);
+  return {plotArea:area, footprint:Math.max(0,footprint), footprintRatio:ratio, BA, gardenArea:Math.max(0,area-footprint), rect:R};
+}
+
+async function generate(){
+  const st=document.getElementById('genStatus'), btn=document.getElementById('genBtn');
+  btn.disabled=true; st.innerHTML='<div class="spin"></div><div style="margin-top:8px">جاري توليد المقترحات…</div>';
+  const prompt=`أنت مهندس معماري عراقي خبير. هذه بيانات قطعة أرض ومتطلبات صاحبها بصيغة JSON:
+${JSON.stringify(payload(),null,1)}
+ولّد 4 مقترحات تصميم معماري مختلفة جذرياً تراعي الخصوصية العراقية واتجاه القبلة والشمس والواجهات.
+أجب بـJSON فقط بدون أي نص آخر وبدون Markdown، بهذا الشكل بالضبط:
+{"proposals":[{"title":"اسم المقترح","layout":["توزيع الغرف سطر سطر"],"openings":"اتجاهات الفتحات والشبابيك","entrances":"مواقع المداخل","privacy":"وصف الخصوصية","desc2d":"وصف المخطط ثنائي الأبعاد بفقرة","prompt3d":"rich English render prompt structured as SITE (plot sqm, every side length with compass direction, main street direction + frontage length, secondary street if any, buildable rectangle width x depth), ARCHITECTURE, LANDSCAPE, LIGHTING, CAMERA, QUALITY","strengths":["نقطة"],"weaknesses":["نقطة"],"cost_fit":"ملاءمة الكلفة لفئة التشطيب المختارة"}]}`;
+  let data=null;
+  const proxy=localStorage.getItem('bannaa_ai_proxy_url');
+  const url=proxy? proxy.trim().replace(/\/+$/,'')+'/ai' : 'https://api.anthropic.com/v1/messages';
+  try{
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4000,messages:[{role:'user',content:prompt}]})});
+    const j=await r.json();
+    const txt=(j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
+    data=JSON.parse(txt.replace(/```json|```/g,'').trim());
+    if(!data.proposals||data.proposals.length<1) throw 0;
+  }catch(e){ data={proposals:localProposals()}; toast('تعذر الاتصال بالذكاء الاصطناعي — وُلّدت مقترحات محلية'); }
+  S.proposals=data.proposals.slice(0,4); persist();
+  btn.disabled=false; st.textContent='✓ تم توليد '+S.proposals.length+' مقترحات';
+  renderProps(); document.getElementById('toReport').style.display='block'; refreshTabs();
+}
+
+function localProposals(){
+  const ls=landSummary(); const f=ls.main_street.direction;
+  const base=(t,layoutExtra,priv,pl,mi,hint)=>({title:t,
+    layout:[`مدخل رئيسي على الواجهة ${f==='غير محددة'?'الأمامية':f+'ة'}`,
+      `ديوانية/استقبال رجال: ${D.diwaniya}`,`استقبال نساء: ${D.women}`,
+      `${D.bedrooms} غرف نوم — ${D.floors>1?'موزعة بين الطابقين':'في الطابق الأرضي'}`,
+      `مطبخ ${D.kitchen} + ${D.hall}`,`${D.baths} حمامات`,
+      `كراج لـ${D.cars} سيارة على الواجهة`,...layoutExtra],
+    openings:`الفتحات الكبيرة نحو ${f==='غير محددة'?'الواجهة الرئيسية':f==='شمالي'?'الشمال (إضاءة بلا حرارة)':f}، شبابيك علوية ضيقة على جهات الجيران للخصوصية`,
+    entrances:`باب رئيسي ${D.mainDoor}${D.secondaryDoor==='نعم'?' + باب ثانوي للعائلة من الجهة الجانبية':''}`,
+    privacy:priv, desc2d:`مخطط ${D.corridor} يفصل جناح الضيوف عن جناح العائلة، مع ارتدادات (ش${D.setbacks.n}/ج${D.setbacks.s}/شر${D.setbacks.e}/غ${D.setbacks.w}م)${S.useRect?'، والبناء مقيّد بأكبر مستطيل داخل القطعة':''}.`,
+    prompt3d:buildPrompt3D(hint),
+    strengths:pl, weaknesses:mi, cost_fit:`مناسب لفئة التشطيب "${D.finish}" مع إمكانية الضبط حسب السوق المحلي`});
+  return [
+    base('المخطط المحوري التقليدي',['كردور مركزي يوزع لكل الفضاءات'],'فصل تام بين مسار الضيوف ومسار العائلة منذ المدخل',['توزيع مألوف وسهل التنفيذ','اقتصادي بالإنشاء'],['الكردور يستهلك مساحة'],
+      'classic symmetrical massing, central axis entrance, hipped concrete roof, traditional proportions'),
+    base('الديوانية المستقلة',['ديوانية بمدخل خارجي خاص وحمّام ضيوف ملاصق'],'خصوصية عالية جداً — الضيوف لا يدخلون عمق البيت إطلاقاً',['أعلى خصوصية عراقية','مثالي للعزائم'],['يستهلك جزءاً من الواجهة'],
+      'separate guest diwaniya wing with its own street entrance, two distinct volumes joined by a shaded link'),
+    base('الفناء الداخلي (الحوش)',['فناء داخلي وسطي تفتح عليه المعيشة والمطبخ'],'الفتحات نحو الداخل — خصوصية بصرية كاملة من الشارع والجيران',['تهوية وإضاءة طبيعية ممتازة','طراز عراقي أصيل'],['كلفة أعلى قليلاً','يحتاج مساحة كافية'],
+      'introverted courtyard house, blank elegant street facade, lush central courtyard with water feature visible through the entrance'),
+    base('المودرن المفتوح',['صالة ومطبخ مفتوحان بمسقط حر، جناح نوم منفصل'],'الخصوصية عبر منسوب مرتفع للأرضي وشبابيك علوية',['إحساس بالاتساع','واجهة عصرية مميزة'],['عزل صوتي أقل بين الفضاءات'],
+      'bold cantilevered upper volume, floating horizontal planes, raised ground floor plinth, dramatic double-height glazing toward the garden')];
+}
+
+/* ===== تنفيذ البرومبت على موديلات الذكاء الاصطناعي + جمع الصور ===== */
+const AI_MODELS=[
+  {n:'ChatGPT · DALL·E', u:p=>'https://chatgpt.com/?q='+encodeURIComponent(p)},
+  {n:'Bing Creator (مجاني)', u:p=>'https://www.bing.com/images/create?q='+encodeURIComponent(p)},
+  {n:'Midjourney', u:_=>'https://www.midjourney.com/imagine'},
+  {n:'Leonardo.Ai', u:_=>'https://app.leonardo.ai/image-generation'},
+  {n:'Ideogram', u:_=>'https://ideogram.ai'},
+  {n:'ImageFX · Google', u:_=>'https://labs.google/fx/tools/image-fx'}
+];
+function runPrompt(i,m){
+  const p=(S.proposals[i]&&S.proposals[i].prompt3d)||'';
+  if(navigator.clipboard) navigator.clipboard.writeText(p).catch(()=>{});
+  toast('📋 نُسخ البرومبت — الصقه إذا لم يظهر تلقائياً');
+  window.open(AI_MODELS[m].u(p),'_blank');
+}
+function pickImgs(i){ const f=document.getElementById('propImgFile'); f.dataset.idx=i; f.value=''; f.click(); }
+function compressImg(file){ return new Promise(res=>{ const img=new Image();
+  img.onload=()=>{ const M=900; const k=Math.min(1,M/Math.max(img.width,img.height));
+    const c=document.createElement('canvas'); c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+    URL.revokeObjectURL(img.src); res(c.toDataURL('image/jpeg',0.72)); };
+  img.src=URL.createObjectURL(file); }); }
+async function attachImgs(inp){
+  const i=+inp.dataset.idx; S.propImgs=S.propImgs||{}; const arr=S.propImgs[i]=S.propImgs[i]||[];
+  for(const f of inp.files){ if(arr.length>=4){toast('الحد ٤ صور لكل مقترح');break;} arr.push(await compressImg(f)); }
+  try{ persist(); }catch(e){ arr.pop(); persist(); toast('⚠️ الذاكرة امتلأت — احذف صوراً قديمة'); }
+  renderProps(); toast('📎 أُرفقت الصور — ستظهر بالتقرير الشامل');
+}
+function delImg(i,j){ S.propImgs[i].splice(j,1); persist(); renderProps(); }
+
+function renderProps(){
+  const w=document.getElementById('propsList'); w.innerHTML='';
+  (S.proposals||[]).forEach((p,i)=>{
+    const imgs=(S.propImgs&&S.propImgs[i])||[];
+    const d=document.createElement('div'); d.className='prop';
+    d.innerHTML=`<h3>المقترح ${i+1}: ${p.title||''}</h3>
+      <h4>توزيع الغرف</h4><ul>${(p.layout||[]).map(x=>`<li>${x}</li>`).join('')}</ul>
+      <h4>اتجاهات الفتحات</h4><p>${p.openings||''}</p>
+      <h4>المداخل</h4><p>${p.entrances||''}</p>
+      <h4>الخصوصية</h4><p>${p.privacy||''}</p>
+      <h4>وصف المخطط 2D</h4><p>${p.desc2d||''}</p>
+      <h4>برومبت 3D</h4><p class="p3d">${p.prompt3d||''}</p>
+      <h4>🚀 تنفيذ البرومبت — اختر الموديل (يُنسخ تلقائياً)</h4>
+      <div class="models">${AI_MODELS.map((m,k)=>`<button onclick="runPrompt(${i},${k})">${m.n}</button>`).join('')}</div>
+      <h4>📎 صور الناتج — تُجمع بالتقرير الشامل (حتى ٤)</h4>
+      <div class="imgrid">${imgs.map((u,j)=>`<span class="thumb"><img src="${u}"><b onclick="delImg(${i},${j})">✕</b></span>`).join('')}
+        <button class="addimg" onclick="pickImgs(${i})">＋</button></div>
+      <div class="pm"><div class="plus"><b>✚ القوة</b><br>${(p.strengths||[]).join('<br>')}</div>
+      <div class="minus"><b>− الضعف</b><br>${(p.weaknesses||[]).join('<br>')}</div></div>
+      <h4>ملاءمة الكلفة</h4><p>${p.cost_fit||''}</p>`;
+    w.appendChild(d);
+  });
+}
+
+/* ================= REPORT ================= */
+function quantities(){
+  const b=buildableAnalysis(); const BA=b.BA;
+  return { footprint:b.footprint, BA, garden:b.gardenArea, ratio:b.footprintRatio,
+    brick:Math.round(BA*78), cement:+(BA*0.20).toFixed(1), sand:+(BA*0.48).toFixed(1),
+    gravel:+(BA*0.42).toFixed(1), rebar:+(BA*38/1000).toFixed(2), concrete:+(BA*0.32).toFixed(1),
+    ceramic:Math.round(BA*1.12), doors:D.bedrooms+D.baths+3, windows:D.bedrooms+4,
+    paint:Math.round(BA*2.8), plumbing:Math.max(1,D.baths+1), electrical:Math.round(BA*0.9) };
+}
+const RATES={'اقتصادي':300000,'متوسط':450000,'فاخر':700000};
+const NUM=v=>Number(v).toLocaleString('en-US');
+
+function satImg(){
+  if(S.pts.length<3)return '';
+  let minx=180,maxx=-180,miny=90,maxy=-90;
+  S.pts.forEach(p=>{minx=Math.min(minx,p.lng);maxx=Math.max(maxx,p.lng);miny=Math.min(miny,p.lat);maxy=Math.max(maxy,p.lat);});
+  const px=(maxx-minx)*0.6||0.001, py=(maxy-miny)*0.6||0.001;
+  return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${minx-px},${miny-py},${maxx+px},${maxy+py}&bboxSR=4326&imageSR=4326&size=640,400&format=jpg&f=image`;
+}
+function shapeSVG(){
+  if(S.pts.length<3)return '';
+  const lat0=S.pts[0].lat*Math.PI/180, kx=Math.cos(lat0);
+  let xs=S.pts.map(p=>p.lng*kx), ys=S.pts.map(p=>-p.lat);
+  const mnx=Math.min(...xs),mxx=Math.max(...xs),mny=Math.min(...ys),mxy=Math.max(...ys);
+  const W=300,H=300,P=36, sc=Math.min((W-2*P)/(mxx-mnx||1e-9),(H-2*P)/(mxy-mny||1e-9));
+  const X=i=>P+(xs[i]-mnx)*sc, Y=i=>P+(ys[i]-mny)*sc;
+  const pts=S.pts.map((_,i)=>`${X(i).toFixed(1)},${Y(i).toFixed(1)}`).join(' ');
+  const sides=calcSides();
+  let lbl='';
+  sides.forEach(s=>{ const a=s.i,b=(s.i+1)%S.pts.length;
+    lbl+=`<text x="${((X(a)+X(b))/2).toFixed(1)}" y="${((Y(a)+Y(b))/2-4).toFixed(1)}" font-size="9.5" font-weight="700" fill="#1C3552" text-anchor="middle">${fmtLen(s.len)}</text>`; });
+  let vts=''; S.pts.forEach((_,i)=>{ vts+=`<circle cx="${X(i)}" cy="${Y(i)}" r="4" fill="#C9A22A" stroke="#1C3552" stroke-width="1.5"/><text x="${X(i)+8}" y="${Y(i)+4}" font-size="9" fill="#555">${i+1}</text>`; });
+  const R=inscribedRect(); let rrect='';
+  if(R){ const pr=R.corners.map(c=>{
+      const x=P+((c.lng*kx)-mnx)*sc, y=P+(((-c.lat))-mny)*sc;
+      return x.toFixed(1)+','+y.toFixed(1); }).join(' ');
+    rrect=`<polygon points="${pr}" fill="none" stroke="#1D6FB8" stroke-width="1.6" stroke-dasharray="6,4"/>`; }
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+    <polygon points="${pts}" fill="rgba(201,162,42,.15)" stroke="#C9A22A" stroke-width="2"/>${rrect}${lbl}${vts}
+    <g transform="translate(20,24)"><text x="0" y="0" font-size="13" font-weight="700" fill="#1C3552">↑ N</text><text x="-2" y="12" font-size="8" fill="#888">شمال</text></g></svg>`;
+}
+function renderReport(){
+  const pg=getPoly(); if(!pg||!S.proposals){return;}
+  const area=turf.area(pg), sides=calcSides(), perim=sides.reduce((t,s)=>t+s.len,0);
+  const q=quantities(); const today=new Date().toLocaleDateString('ar-IQ');
+  const req=[['نوع البناء',D.buildType],['النمط',D.style],['الطوابق',D.floors],['غرف النوم',D.bedrooms],['الحمامات',D.baths],
+    ['المطبخ',D.kitchen],['الصالة',D.hall],['الكردور',D.corridor],['الكراج',D.cars+' سيارة'],['الباب الرئيسي',D.mainDoor],
+    ['باب ثانوي',D.secondaryDoor],['الديوانية',D.diwaniya],['استقبال النساء',D.women],['الخصوصية',D.privacy],
+    ['الطابق الثاني',(D.floor2||[]).join('، ')||'—'],['فئة التشطيب',D.finish],
+    ['الارتدادات (م)',`ش${D.setbacks.n} / ج${D.setbacks.s} / شر${D.setbacks.e} / غ${D.setbacks.w}`]];
+  document.getElementById('report').innerHTML=`
+  <h1>تقرير مشروع: ${S.project||'بدون اسم'}</h1>
+  <div class="meta">بنّاء AI — دار الإبداع للحلول البرمجية · تاريخ الإصدار: ${today}</div>
+  <h2>صورة الموقع الجوية</h2><img class="sat" src="${satImg()}" alt="صورة جوية">
+  <h2>شكل القطعة وأطوال الأضلاع</h2><div class="shape">${shapeSVG()}</div>
+  ${(()=>{const R=inscribedRect();return R?`<div class="meta" style="margin-top:8px">▭ <b>أكبر مستطيل بناء داخل القطعة:</b> ${fmtLen(R.width)} (موازٍ للواجهة الرئيسية) × ${fmtLen(R.depth)} = ${fmt(R.area,0)} م²${S.useRect?' — <b>البناء مقيّد بهذا المستطيل</b>':''} (الخط الأزرق المتقطع في المخطط)</div>`:''})()}
+  <h2>المساحة والمحيط</h2>
+  <table><tr><th>م²</th><th>دونم</th><th>أولك</th><th>ياردة²</th><th>المحيط</th></tr>
+  <tr><td>${fmt(area)}</td><td>${fmt(area/2500,3)}</td><td>${fmt(area/100,2)}</td><td>${fmt(area*1.19599,0)}</td><td>${fmtLen(perim)}</td></tr></table>
+  <h2>تحليل المساحة البنائية بعد الارتدادات</h2>
+  <table><tr><th>مساحة الأرض</th><th>بصمة البناء الأرضية التقديرية</th><th>نسبة الإشغال</th><th>مساحة الحديقة/الفارغ</th><th>إجمالي البناء</th></tr>
+  <tr><td>${fmt(area)} م²</td><td>${fmt(q.footprint)} م²</td><td>${fmt(q.ratio*100,1)}%</td><td>${fmt(q.garden)} م²</td><td>${fmt(q.BA)} م²</td></tr></table>
+  <div class="warn-mini">هذا التحليل يربط الارتدادات مع أكبر مستطيل بناء داخل القطعة عندما يكون متاحاً، ليمنع المبالغة في الكلفة أو استغلال مساحة غير قابلة للبناء.</div>
+  <h2>جدول الإحداثيات (GPS)</h2>
+  <table><tr><th>نقطة</th><th>خط العرض Lat</th><th>خط الطول Lng</th></tr>
+  ${S.pts.map((p,i)=>`<tr><td>${i+1}</td><td>${p.lat.toFixed(6)}</td><td>${p.lng.toFixed(6)}</td></tr>`).join('')}</table>
+  <h2>جدول الأضلاع</h2>
+  <table><tr><th>ضلع</th><th>الطول</th><th>بالمتر (عشري)</th><th>الاتجاه</th><th>الواجهة</th></tr>
+  ${sides.map(s=>`<tr><td>${s.i+1}</td><td>${fmtLen(s.len)}</td><td>${s.len.toFixed(2)}</td><td>${s.dir}</td><td>${S.mainSide===s.i?'رئيسية ★':S.secSide===s.i?'ثانوية':'—'}</td></tr>`).join('')}</table>
+  <h2>متطلبات صاحب المشروع</h2>
+  <div class="req-grid">${req.map(r=>`<div><b>${r[0]}:</b> ${r[1]??'—'}</div>`).join('')}</div>
+  <h2>المقترحات التصميمية (٤)</h2>
+  ${S.proposals.map((p,i)=>`<div class="prop-r"><h3>المقترح ${i+1}: ${p.title||''}</h3>
+    <p><b>التوزيع:</b> ${(p.layout||[]).join(' · ')}</p>
+    <p><b>الفتحات:</b> ${p.openings||''}</p><p><b>المداخل:</b> ${p.entrances||''}</p>
+    <p><b>الخصوصية:</b> ${p.privacy||''}</p><p><b>الوصف 2D:</b> ${p.desc2d||''}</p>
+    <p><b>القوة:</b> ${(p.strengths||[]).join('، ')} — <b>الضعف:</b> ${(p.weaknesses||[]).join('، ')}</p>
+    <p><b>الكلفة:</b> ${p.cost_fit||''}</p>
+    ${((S.propImgs&&S.propImgs[i])||[]).length?`<p><b>مخرجات الذكاء الاصطناعي:</b></p><div class="imgrid">${S.propImgs[i].map(u=>`<img src="${u}">`).join('')}</div>`:''}</div>`).join('')}
+  <h2>تقدير الكميات الأولي</h2>
+  <div class="meta">مساحة البناء التقديرية: ${fmt(q.footprint)} م² أرضي · إجمالي البناء ${fmt(q.BA)} م² (${D.floors} طابق)</div>
+  <table><tr><th>المادة</th><th>الكمية التقديرية</th><th>الوحدة</th></tr>
+  <tr><td>طابوق / بلوك</td><td>${NUM(q.brick)}</td><td>طابوقة</td></tr>
+  <tr><td>سمنت</td><td>${NUM(q.cement)}</td><td>طن</td></tr>
+  <tr><td>رمل</td><td>${NUM(q.sand)}</td><td>م³</td></tr>
+  <tr><td>حصى</td><td>${NUM(q.gravel)}</td><td>م³</td></tr>
+  <tr><td>حديد تسليح</td><td>${NUM(q.rebar)}</td><td>طن</td></tr>
+  <tr><td>خرسانة</td><td>${NUM(q.concrete)}</td><td>م³</td></tr>
+  <tr><td>سيراميك</td><td>${NUM(q.ceramic)}</td><td>م²</td></tr>
+  <tr><td>أبواب</td><td>${q.doors}</td><td>باب</td></tr>
+  <tr><td>شبابيك</td><td>${q.windows}</td><td>شباك</td></tr>
+  <tr><td>دهان تقريبي</td><td>${NUM(q.paint)}</td><td>م²</td></tr>
+  <tr><td>نقاط صحية</td><td>${q.plumbing}</td><td>مجموعة</td></tr>
+  <tr><td>نقاط كهرباء</td><td>${NUM(q.electrical)}</td><td>نقطة تقريبية</td></tr>
+  <tr><td>كهربائيات وصحيات</td><td colspan="2">مقطوعية حسب فئة التشطيب (ضمن الكلفة أدناه)</td></tr></table>
+  <h2>تقدير الكلفة الإجمالية (٣ فئات)</h2>
+  <table><tr><th>الفئة</th><th>سعر م² (د.ع)</th><th>الكلفة الإجمالية (د.ع)</th></tr>
+  ${Object.entries(RATES).map(([t,r])=>`<tr class="${t===D.finish?'tier-hl':''}"><td>${t}${t===D.finish?' ★ المختارة':''}</td><td>${NUM(r)}</td><td>${NUM(Math.round(q.BA*r))}</td></tr>`).join('')}</table>
+  <div class="warn">⚠️ تنبيه مهم: هذا التقرير <b>أولي وتقديري</b> أُعدّ بواسطة تطبيق بنّاء AI لأغراض الدراسة المبدئية فقط. الكميات والكلف تقريبية وتتغير حسب أسعار السوق وطبيعة التربة والتصميم النهائي. <b>يجب مراجعة مهندس معماري وإنشائي مرخّص</b> قبل أي تعاقد أو تنفيذ.</div>`;
+}
+/* ============ نظام المشاركة (٣ مجاناً) + ملف .bannaa مشفر ============ */
+const SH_KEY='BannaaAI-FLJ-2026', SHARES_MAX=3;
+const xorStr=s=>s.split('').map((c,i)=>String.fromCharCode(c.charCodeAt(0)^SH_KEY.charCodeAt(i%SH_KEY.length))).join('');
+const encReport=o=>'BNA1:'+btoa(xorStr(btoa(unescape(encodeURIComponent(JSON.stringify(o))))));
+const decReport=t=>{ if(!t.startsWith('BNA1:'))throw 0; return JSON.parse(decodeURIComponent(escape(atob(xorStr(atob(t.slice(5))))))); };
+const sharesUsed=()=>+(localStorage.getItem('bannaa_shares_used')||0);
+
+function openShare(){
+  if(!S.proposals){toast('⚠️ ولّد المقترحات أولاً');return;}
+  document.getElementById('shLeft').textContent=Math.max(0,SHARES_MAX-sharesUsed());
+  openModal('m-share');
+}
+async function doShareFile(){
+  if(sharesUsed()>=SHARES_MAX){ closeModals(); toast('انتهت المشاركات المجانية الثلاث'); setTimeout(()=>openModal('m-pay'),600); return; }
+  const fname=('تقرير-بناء-'+(S.project||'مشروع')).replace(/\s+/g,'-')+'.bannaa';
+  const blob=new Blob([encReport({project:S.project,pts:S.pts,mainSide:S.mainSide,secSide:S.secSide,design:D,proposals:S.proposals,shared:new Date().toISOString()})],{type:'application/octet-stream'});
+  const file=new File([blob],fname,{type:'application/octet-stream'});
+  const msg=`📐 تقرير "${S.project||'مشروع'}" من تطبيق بنّاء AI\nلفتح التقرير: نزّل تطبيق بنّاء AI ثم اضغط "📥 فتح تقرير مستلم" واختر الملف المرفق.`;
+  let ok=false;
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    try{ await navigator.share({title:'تقرير بنّاء AI',text:msg,files:[file]}); ok=true; }catch(e){ if(e.name!=='AbortError'){} }
+  }
+  if(!ok){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=fname; a.click();
+    window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank'); ok=true; }
+  if(ok){ localStorage.setItem('bannaa_shares_used',sharesUsed()+1);
+    document.getElementById('shLeft').textContent=Math.max(0,SHARES_MAX-sharesUsed());
+    toast('📤 أُرسل التقرير — تبقى '+Math.max(0,SHARES_MAX-sharesUsed())+' مشاركات مجانية'); }
+}
+function importReport(inp){
+  const f=inp.files[0]; if(!f)return; inp.value='';
+  const rd=new FileReader();
+  rd.onload=()=>{ try{
+      const o=decReport(rd.result.trim());
+      if(!o.pts||!o.proposals)throw 0;
+      const keepS=S,keepD=D;
+      S=Object.assign({},o); D=S.design;
+      document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+      document.getElementById('view-report').classList.add('active');
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      document.getElementById('tab-3').classList.add('active');
+      renderReport();
+      document.getElementById('report').insertAdjacentHTML('afterbegin',
+        '<div style="background:#F6F0DC;border:1.5px solid #C9A22A;color:#6e5510;border-radius:11px;padding:10px;font-size:12.5px;font-weight:700;margin-bottom:12px">📥 هذا تقرير مستلم من مشارك — مشروعك الخاص محفوظ ولم يتأثر.</div>');
+      S=keepS; D=keepD;
+      toast('✓ فُتح التقرير المستلم');
+    }catch(e){ toast('⚠️ الملف غير صالح — يجب أن يكون ملف .bannaa من التطبيق'); } };
+  rd.readAsText(f);
+}
+
+/* ============ بوابة تقرير PDF المدفوع (10,000 د.ع) ============ */
+const PDF_SECRET='BNA-PDF-2026-FLJ';
+async function sha6(s){ const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));
+  return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,6).toUpperCase(); }
+function printPDF(){
+  if(!S.proposals){toast('⚠️ ولّد المقترحات أولاً');return;}
+  if(localStorage.getItem('bannaa_pdf_ok')==='1'){ window.print(); return; }
+  openModal('m-pay');
+}
+async function verifyPay(){
+  const ph=document.getElementById('payPhone').value.trim(), cd=document.getElementById('payCode').value.trim().toUpperCase();
+  if(!ph||!cd){toast('أدخل رقم الهاتف ورمز التفعيل');return;}
+  if(await sha6(ph+PDF_SECRET)===cd){
+    localStorage.setItem('bannaa_pdf_ok','1'); localStorage.setItem('bannaa_pdf_phone',ph);
+    closeModals(); toast('✓ تم التفعيل — تقرير PDF متاح الآن'); setTimeout(()=>window.print(),900);
+  } else toast('✗ رمز التفعيل غير صحيح');
+}
+/* ============ الدفع التلقائي عبر زين كاش (يتطلب Worker) ============ */
+function workerBase(){ const u=(localStorage.getItem('bannaa_ai_proxy_url')||'').trim().replace(/\/+$/,''); return u||null; }
+function deviceId(){ let d=localStorage.getItem('bannaa_device');
+  if(!d){ d='dev-'+crypto.randomUUID(); localStorage.setItem('bannaa_device',d); } return d; }
+async function zcPay(){
+  const w=workerBase();
+  if(!w){ toast('⚠️ ضع رابط خادم بنّاء (Worker) في الإعدادات ⚙️ أولاً'); return; }
+  const st=document.getElementById('zcStatus'); st.textContent='جاري إنشاء معاملة زين كاش…';
+  try{
+    const r=await fetch(w+'/pay/init',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({deviceId:deviceId(),project:S.project||'مشروع',returnUrl:location.origin+location.pathname})});
+    const j=await r.json();
+    if(!j.payUrl) throw new Error(j.error||'فشل إنشاء المعاملة');
+    localStorage.setItem('bannaa_order',j.orderId);
+    st.textContent='تحويلك إلى صفحة زين كاش…';
+    location.href=j.payUrl;
+  }catch(e){ st.textContent='⚠️ '+(e.message||'تعذر الاتصال بالخادم — جرّب التفعيل اليدوي'); }
+}
+async function checkPayReturn(){
+  const usp=new URLSearchParams(location.search);
+  const order=usp.get('order')||localStorage.getItem('bannaa_order');
+  if(localStorage.getItem('bannaa_pdf_ok')==='1'||!order) return;
+  const w=workerBase(); if(!w) return;
+  try{
+    const r=await fetch(w+'/pay/status?order='+encodeURIComponent(order));
+    const j=await r.json();
+    if(j.paid){
+      localStorage.setItem('bannaa_pdf_ok','1'); localStorage.removeItem('bannaa_order');
+      toast('✓ تم الدفع عبر زين كاش — تقرير PDF مفعّل');
+      if(usp.get('paid')==='1'){ history.replaceState(null,'',location.pathname); if(S.proposals)go(3); }
+    } else if(usp.get('paid')==='0'){ toast('✗ لم يكتمل الدفع — حاول مجدداً'); history.replaceState(null,'',location.pathname); }
+  }catch(e){}
+}
+
+/* مولد رموز المدير: ضغطة مطولة (ثانيتان) على عنوان "الإعدادات" */
+(function(){ const h=document.querySelector('#m-settings h3'); let tm;
+  const start=()=>{ tm=setTimeout(async()=>{
+    const pin=prompt('رمز المدير:'); if(pin!=='DRA-1042'){if(pin!==null)toast('رمز خاطئ');return;}
+    const ph=prompt('رقم هاتف الزبون:'); if(!ph)return;
+    const code=await sha6(ph.trim()+PDF_SECRET);
+    prompt('رمز التفعيل للزبون '+ph+' (انسخه):',code);
+  },2000); };
+  const end=()=>clearTimeout(tm);
+  h.addEventListener('touchstart',start); h.addEventListener('touchend',end);
+  h.addEventListener('mousedown',start); h.addEventListener('mouseup',end); h.addEventListener('mouseleave',end);
+})();
+
+/* ================= MODALS / SETTINGS / PWA ================= */
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModals(){ document.querySelectorAll('.modal').forEach(m=>m.classList.remove('open')); }
+document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m)closeModals(); }));
+function saveSettings(){ localStorage.setItem('bannaa_ai_proxy_url',document.getElementById('proxyUrl').value.trim()); closeModals(); toast('✓ حُفظت الإعدادات'); }
+const mf={name:'بنّاء AI v7',short_name:'بنّاء AI',display:'standalone',start_url:'.',background_color:'#F1F4F8',theme_color:'#1C3552',
+  icons:[{src:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="44" fill="#1C3552"/><text x="96" y="125" font-size="90" text-anchor="middle" fill="#E3C45A" font-family="sans-serif" font-weight="bold">بـ</text></svg>'),sizes:'192x192',type:'image/svg+xml'}]};
+const l=document.createElement('link'); l.rel='manifest'; l.href=URL.createObjectURL(new Blob([JSON.stringify(mf)],{type:'application/json'})); document.head.appendChild(l);
+
+hydrate(); redraw(); checkPayReturn();
+</script>
+</body>
+</html>
