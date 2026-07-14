@@ -627,7 +627,12 @@ function inscribedRect(){
 function toggleRect(){ S.useRect=!S.useRect; persist(); softRedraw(); }
 
 /* ===== ترجمة المصطلحات للبرومبت الإنجليزي ===== */
-const DIR_EN={'شمالي':'north','شمالي شرقي':'north-east','شرقي':'east','جنوبي شرقي':'south-east','جنوبي':'south','جنوبي غربي':'south-west','غربي':'west','شمالي غربي':'north-west'};
+/* ✅ v7.2 — 16 جهة كاملة. الناقصة كانت تُرجع undefined فيتسرب العربي للبرومبت الإنجليزي */
+const DIR_EN={'شمالي':'north','شمالي شمالي شرقي':'north-northeast','شمالي شرقي':'north-east','شرقي شمالي شرقي':'east-northeast',
+'شرقي':'east','شرقي جنوبي شرقي':'east-southeast','جنوبي شرقي':'south-east','جنوبي جنوبي شرقي':'south-southeast',
+'جنوبي':'south','جنوبي جنوبي غربي':'south-southwest','جنوبي غربي':'south-west','غربي جنوبي غربي':'west-southwest',
+'غربي':'west','غربي شمالي غربي':'west-northwest','شمالي غربي':'north-west','شمالي شمالي غربي':'north-northwest'};
+const dirEN = d => DIR_EN[d] || d || 'unknown';
 const STYLE_EN={'عراقي تراثي':'traditional Iraqi heritage with shanasheel-inspired details','شرقي':'oriental Middle-Eastern','غربي':'western contemporary','مودرن':'modern minimalist','اقتصادي':'simple cost-efficient'};
 const FINISH_EN={'اقتصادي':'budget','متوسط':'mid-range','فاخر':'luxury high-end'};
 
@@ -637,16 +642,18 @@ function buildPrompt3D(hint){
   const pg=getPoly(); const area=pg?turf.area(pg):0;
   const main=S.mainSide!=null? sides.find(s=>s.i===S.mainSide):null;
   const sec=S.secSide!=null? sides.find(s=>s.i===S.secSide):null;
-  const sidesTxt=sides.map(s=>`${DIR_EN[s.dir]||s.dir} ${s.len.toFixed(1)}m`).join(', ');
-  const mainTxt=main? `main street on the ${DIR_EN[main.dir]} side with a ${main.len.toFixed(1)}m frontage`:'main street on the front side';
-  const secTxt=sec? `, adjacent secondary street on the ${DIR_EN[sec.dir]} side (${sec.len.toFixed(1)}m corner plot)`:'';
+  /* ✅ v7.2 — الواجهة (face) هي العمودي على الضلع نحو الخارج، وهي ما يحدد
+     التشميس والإطلالة. اتجاه الضلع نفسه (dir) لا يصلح لوصف الواجهة. */
+  const sidesTxt=sides.map(s=>`a ${s.len.toFixed(1)}m side facing ${dirEN(s.face)}`).join(', ');
+  const mainTxt=main? `main street on the ${dirEN(main.face)} side (the plot's ${main.len.toFixed(1)}m frontage faces ${dirEN(main.face)})`:'main street on the front side';
+  const secTxt=sec? `, adjacent secondary street facing ${dirEN(sec.face)} (${sec.len.toFixed(1)}m corner plot)`:'';
   const rectTxt=R? `; largest buildable rectangle ${R.width.toFixed(1)}m wide (parallel to the main street) x ${R.depth.toFixed(1)}m deep = ${Math.round(R.area)} sqm${S.useRect?' — the building footprint MUST stay strictly within this rectangle':''}`:'';
   return `Award-winning architectural visualization, photorealistic 3D exterior render of a ${STYLE_EN[D.style]||'modern'} ${D.floors}-storey Iraqi family ${D.buildType==='فيلا'?'villa':'house'} in Anbar, Iraq.
 SITE: ${Math.round(area)} sqm plot, boundary sides: ${sidesTxt}; ${mainTxt}${secTxt}${rectTxt}; garden setbacks N ${D.setbacks.n}m / S ${D.setbacks.s}m / E ${D.setbacks.e}m / W ${D.setbacks.w}m.
-ARCHITECTURE: ${hint||'strong horizontal massing with cantilevered upper floor, double-height recessed entrance'}, warm Iraqi yellow brick (tabouk) and travertine stone facade, mashrabiya-inspired perforated privacy screens on upper windows, deep roof overhangs for sun shading, dark anthracite aluminum frames, main entrance and ${D.cars>0?`carport for ${D.cars} car${D.cars>1?'s':''}`:'pedestrian gate'} facing the ${main?DIR_EN[main.dir]:'main'} street, ${FINISH_EN[D.finish]||'mid-range'} finishing level.
+ARCHITECTURE: ${hint||'strong horizontal massing with cantilevered upper floor, double-height recessed entrance'}, warm Iraqi yellow brick (tabouk) and travertine stone facade, mashrabiya-inspired perforated privacy screens on upper windows, deep roof overhangs for sun shading, dark anthracite aluminum frames, main entrance and ${D.cars>0?`carport for ${D.cars} car${D.cars>1?'s':''}`:'pedestrian gate'} facing the ${main?dirEN(main.face):'main'} street, ${FINISH_EN[D.finish]||'mid-range'} finishing level.
 LANDSCAPE: stone boundary wall with dark steel gate, date palms and olive trees, drought-tolerant desert landscaping, large-format paver driveway, linear water feature beside the entrance path, warm pathway uplights.
 LIGHTING: golden hour, low warm sun, long soft shadows, gentle haze, interior glow through the screens, clear gradient sky.
-CAMERA: street-level three-quarter view from the ${main?DIR_EN[main.dir]:'main'} street, 24mm tilt-shift lens, eye height 1.6m, slight foreground depth of field.
+CAMERA: street-level three-quarter view from the ${main?dirEN(main.face):'main'} street, 24mm tilt-shift lens, eye height 1.6m, slight foreground depth of field.
 QUALITY: V-Ray / Corona render style, physically accurate materials, global illumination, 8k, ultra detailed, architectural photography.`;
 }
 
@@ -702,7 +709,7 @@ function updateMetrics(){
   const L1=document.getElementById('sidesList'); L1.innerHTML='';
   sides.forEach(s=>{
     const r=document.createElement('div'); r.className='side-row';
-    r.innerHTML=`<span>ضلع ${s.i+1}</span><span class="len">${fmtLen(s.len)}</span><span class="dir" title="اتجاه الضلع ${s.dms} — الواجهة نحو ${s.face}">${s.dir}</span><span class="grow"></span>
+    r.innerHTML=`<span>ضلع ${s.i+1}</span><span class="len">${fmtLen(s.len)}</span><span class="dir" title="الواجهة تطل نحو ${s.face} · امتداد الضلع ${s.dir} (${s.dms})">↗ ${s.face}</span><span class="grow"></span>
       <button class="fchip ${S.mainSide===s.i?'on-main':''}" onclick="setFront(${s.i},'main')">رئيسية</button>
       <button class="fchip ${S.secSide===s.i?'on-sec':''}" onclick="setFront(${s.i},'sec')">ثانوية</button>`;
     L1.appendChild(r);
@@ -735,7 +742,7 @@ function geojson(){
   const feature={type:'Feature',
     bbox: bb||undefined,
     properties:{
-      name:S.project||'قطعة أرض', app:'بنّاء AI', app_version:'7.1',
+      name:S.project||'قطعة أرض', app:'بنّاء AI', app_version:'7.2',
       vendor:'دار الإبداع للحلول البرمجية',
       area_m2:+area.toFixed(1),
       area_m2_uncertainty: sigma!=null? +sigma.toFixed(0) : null,
@@ -756,8 +763,8 @@ function geojson(){
         length_m:+s.len.toFixed(2),
         azimuth_deg:+s.az.toFixed(1),
         bearing_dms:s.dms,
-        direction:s.dir,
-        faces:s.face,
+        direction:s.dir,        /* امتداد الضلع */
+        faces:s.face,           /* اتجاه الواجهة — المهم معمارياً */
         frontage:S.mainSide===s.i?'main':S.secSide===s.i?'secondary':null})),
       created:new Date().toISOString()},
     geometry: pg? pg.geometry : {type:'MultiPoint',coordinates:S.pts.map(p=>[p.lng,p.lat])}};
@@ -805,9 +812,12 @@ function landSummary(){
   const sec=S.secSide!=null? sides.find(s=>s.i===S.secSide):null;
   return { area_m2:+(pg?turf.area(pg):0).toFixed(1), donum:+((pg?turf.area(pg):0)/2500).toFixed(3),
     perimeter_m:+sides.reduce((t,s)=>t+s.len,0).toFixed(1),
-    sides:sides.map(s=>({n:s.i+1,length_m:+s.len.toFixed(2),direction:s.dir,direction_en:DIR_EN[s.dir]||s.dir})),
-    main_street:{direction:main?main.dir:'غير محددة',direction_en:main?DIR_EN[main.dir]:null,frontage_length_m:main?+main.len.toFixed(1):null},
-    secondary_street:sec?{direction:sec.dir,direction_en:DIR_EN[sec.dir],length_m:+sec.len.toFixed(1)}:null,
+    /* ✅ v7.2 — direction = اتجاه الواجهة (المهم معمارياً) | side_direction = امتداد الضلع */
+    sides:sides.map(s=>({n:s.i+1,length_m:+s.len.toFixed(2),
+      direction:s.face, direction_en:dirEN(s.face),
+      side_direction:s.dir, azimuth_deg:+s.az.toFixed(1)})),
+    main_street:{direction:main?main.face:'غير محددة',direction_en:main?dirEN(main.face):null,frontage_length_m:main?+main.len.toFixed(1):null},
+    secondary_street:sec?{direction:sec.face,direction_en:dirEN(sec.face),length_m:+sec.len.toFixed(1)}:null,
     largest_buildable_rectangle:R?{width_m_parallel_to_main_street:+R.width.toFixed(1),depth_m:+R.depth.toFixed(1),area_m2:Math.round(R.area)}:null,
     building_must_stay_within_rectangle:!!S.useRect };
 }
@@ -1015,8 +1025,8 @@ function renderReport(){
   <table><tr><th>نقطة</th><th>خط العرض Lat</th><th>خط الطول Lng</th></tr>
   ${S.pts.map((p,i)=>`<tr><td>${i+1}</td><td>${p.lat.toFixed(6)}</td><td>${p.lng.toFixed(6)}</td></tr>`).join('')}</table>
   <h2>جدول الأضلاع</h2>
-  <table><tr><th>ضلع</th><th>الطول</th><th>بالمتر (عشري)</th><th>الاتجاه</th><th>الواجهة</th></tr>
-  ${sides.map(s=>`<tr><td>${s.i+1}</td><td>${fmtLen(s.len)}</td><td>${s.len.toFixed(2)}</td><td>${s.dir}</td><td>${S.mainSide===s.i?'رئيسية ★':S.secSide===s.i?'ثانوية':'—'}</td></tr>`).join('')}</table>
+  <table><tr><th>ضلع</th><th>الطول</th><th>بالمتر (عشري)</th><th>اتجاه الواجهة</th><th>الاستخدام</th></tr>
+  ${sides.map(s=>`<tr><td>${s.i+1}</td><td>${fmtLen(s.len)}</td><td>${s.len.toFixed(2)}</td><td><b>${s.face}</b><br><span style="font-size:9.5px;color:#7A8CA6">امتداد الضلع: ${s.dir} · ${s.dms}</span></td><td>${S.mainSide===s.i?'رئيسية ★':S.secSide===s.i?'ثانوية':'—'}</td></tr>`).join('')}</table>
   <h2>متطلبات صاحب المشروع</h2>
   <div class="req-grid">${req.map(r=>`<div><b>${r[0]}:</b> ${r[1]??'—'}</div>`).join('')}</div>
   <h2>المقترحات التصميمية (٤)</h2>

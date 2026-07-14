@@ -8,7 +8,7 @@
  * Required env vars in Cloudflare:
  *   ANTHROPIC_API_KEY = sk-ant-...
  * Optional:
- *   ALLOWED_ORIGIN = https://your-domain.pages.dev
+ *   ALLOWED_ORIGIN = https://banna-map.vercel.app   (نطاق Vercel — يمنع استخدام مفتاحك من مواقع أخرى)
  */
 const cors = (env) => ({
   'Access-Control-Allow-Origin': env.ALLOWED_ORIGIN || '*',
@@ -34,7 +34,7 @@ export default {
           'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify({
-          model: body.model || 'claude-sonnet-4-5',
+          model: body.model || 'claude-sonnet-4-6',
           max_tokens: body.max_tokens || 4500,
           messages: body.messages || []
         })
