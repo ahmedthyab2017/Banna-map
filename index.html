@@ -55,8 +55,9 @@ nav.tabs{display:flex;gap:7px;padding:9px 12px;background:var(--card);border-bot
 body.mapfull .sheet, body.mapfull #toDesign{display:none!important}
 body.mapfull #mapwrap{margin:0;border-radius:0}
 #map{position:absolute;inset:0;direction:ltr}
-.map-tools{position:absolute;top:10px;right:10px;z-index:800;display:flex;flex-direction:column;gap:7px}
-.map-tools button{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.96);color:var(--navy);font-size:19px;box-shadow:var(--sh-s)}
+.map-tools{position:absolute;top:10px;right:10px;z-index:800;display:grid;grid-template-columns:repeat(2,auto);gap:6px;max-height:calc(100% - 84px);align-content:start;justify-items:center}
+.map-tools button{width:40px;height:40px;border-radius:11px;background:rgba(255,255,255,.96);color:var(--navy);font-size:17px;box-shadow:var(--sh-s);display:flex;align-items:center;justify-content:center}
+.map-tools button.wide{grid-column:1 / -1;width:86px}
 .map-tools button.on{background:var(--navy);color:#fff}
 .base-chips{position:absolute;top:10px;left:10px;z-index:800;display:flex;flex-direction:column;gap:6px}
 .base-chips button{padding:7px 12px;border-radius:18px;background:rgba(255,255,255,.96);font-size:11.5px;color:var(--mut);box-shadow:var(--sh-s);font-weight:500}
@@ -213,14 +214,14 @@ input.txt{width:100%;padding:12px;border-radius:12px;border:1.5px solid var(--li
       <button id="b-ghyb" onclick="setBase('ghyb')">Google اختياري</button>
     </div>
     <div class="map-tools">
-      <button id="t-full" onclick="toggleFull()" title="ملء الشاشة">⛶</button>
       <button id="t-add" class="on" onclick="setMode('add')" title="إضافة نقاط">📍</button>
       <button id="t-rect" onclick="setMode('rect')" title="مستطيل بنقطتين">▭</button>
-      <button onclick="openModal('m-gps')" title="إدخال GPS يدوي">⌨️</button>
+      <button onclick="captureAveraged(20)" title="التقاط نقطة بمتوسط 20 ثانية (أدق)">📌</button>
       <button onclick="locateMe()" title="موقعي">🎯</button>
-      <button onclick="captureAveraged(20)" title="التقاط نقطة بمتوسط 20 ثانية">📌</button>
       <button onclick="undoPt()" title="تراجع عن آخر نقطة">↩️</button>
       <button onclick="clearPts()" title="مسح الكل">🗑️</button>
+      <button onclick="openModal('m-gps')" title="إدخال GPS يدوي">⌨️</button>
+      <button id="t-full" onclick="toggleFull()" title="ملء الشاشة">⛶</button>
     </div>
     <div class="hint" id="hint">اضغط لإضافة نقطة · اسحب النقطة لتعديلها · اضغط عليها لحذفها</div>
   </div>
